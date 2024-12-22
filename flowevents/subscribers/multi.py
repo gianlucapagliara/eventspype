@@ -13,9 +13,9 @@ T = TypeVar("T")
 
 class MultiSubscriber:
     def __init__(self) -> None:
-        self._listeners: dict[
-            EventPublisher, dict[EventSubscription, Any]
-        ] = defaultdict(dict)
+        self._listeners: dict[EventPublisher, dict[EventSubscription, Any]] = (
+            defaultdict(dict)
+        )
 
     # === Class Methods ===
 
