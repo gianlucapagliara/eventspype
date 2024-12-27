@@ -68,43 +68,45 @@ def test_get_event_definitions(publisher: MockPublisher) -> None:
     assert "not_a_publication" not in definitions
 
 
-def test_add_listener(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
-    publisher.add_listener(MockPublisher.event1, subscriber)
-    publisher.add_listener(MockPublisher.event2, subscriber)
+def test_add_subscriber(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
+    publisher.add_subscriber(MockPublisher.event2, subscriber)
 
     assert len(publisher._publishers) == 2
     assert MockPublisher.event1 in publisher._publishers
     assert MockPublisher.event2 in publisher._publishers
 
 
-def test_add_listener_invalid_publication(
+def test_add_subscriber_invalid_publication(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
     invalid_pub = EventPublication(
         MockEvents.EVENT_1, Event1
     )  # Not defined in TestPublisher
     with pytest.raises(ValueError, match="Invalid publication"):
-        publisher.add_listener(invalid_pub, subscriber)
+        publisher.add_subscriber(invalid_pub, subscriber)
 
 
-def test_remove_listener(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
-    publisher.add_listener(MockPublisher.event1, subscriber)
-    publisher.add_listener(MockPublisher.event2, subscriber)
+def test_remove_subscriber(
+    publisher: MockPublisher, subscriber: MockSubscriber
+) -> None:
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
+    publisher.add_subscriber(MockPublisher.event2, subscriber)
 
-    publisher.remove_listener(MockPublisher.event1, subscriber)
+    publisher.remove_subscriber(MockPublisher.event1, subscriber)
     assert MockPublisher.event1 not in publisher._publishers
     assert MockPublisher.event2 in publisher._publishers
 
 
-def test_remove_nonexistent_listener(
+def test_remove_nonexistent_subscriber(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
     # Should not raise any error
-    publisher.remove_listener(MockPublisher.event1, subscriber)
+    publisher.remove_subscriber(MockPublisher.event1, subscriber)
 
 
 def test_trigger_event(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
-    publisher.add_listener(MockPublisher.event1, subscriber)
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
     event = Event1(message="test")
     publisher.trigger_event(MockPublisher.event1, event)
 
@@ -116,7 +118,7 @@ def test_trigger_event(publisher: MockPublisher, subscriber: MockSubscriber) -> 
 def test_trigger_event_invalid_type(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
-    publisher.add_listener(MockPublisher.event1, subscriber)
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
     with pytest.raises(ValueError, match="Invalid event type"):
         publisher.trigger_event(MockPublisher.event1, Event2(message="wrong type"))
 
@@ -131,7 +133,7 @@ def test_trigger_event_invalid_publication(
         publisher.trigger_event(invalid_pub, Event1(message="test"))
 
 
-def test_add_listener_with_callback(publisher: MockPublisher) -> None:
+def test_add_subscriber_with_callback(publisher: MockPublisher) -> None:
     messages: list[str] = []
     tags: list[int] = []
 
@@ -148,17 +150,17 @@ def test_add_listener_with_callback(publisher: MockPublisher) -> None:
     callbacks = [callback]
 
     print(
-        f"Before add_listener_with_callback - Publisher state: {publisher._publishers}"
+        f"Before add_subscriber_with_callback - Publisher state: {publisher._publishers}"
     )
-    publisher.add_listener_with_callback(MockPublisher.event1, callbacks[0])
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callbacks[0])
     print(
-        f"After add_listener_with_callback - Publisher state: {publisher._publishers}"
+        f"After add_subscriber_with_callback - Publisher state: {publisher._publishers}"
     )
 
     event1_publisher = publisher._publishers[MockPublisher.event1]
     print(f"Event1 publisher: {event1_publisher}")
-    print(f"Event1 publisher listeners: {event1_publisher._listeners}")
-    print(f"Event1 publisher get_listeners(): {event1_publisher.get_listeners()}")
+    print(f"Event1 publisher subscribers: {event1_publisher._subscribers}")
+    print(f"Event1 publisher get_subscribers(): {event1_publisher.get_subscribers()}")
 
     event = Event1(message="test")
     print(f"Triggering event: {event}")
@@ -169,7 +171,7 @@ def test_add_listener_with_callback(publisher: MockPublisher) -> None:
     assert tags[0] == MockEvents.EVENT_1.value
 
 
-def test_remove_listener_with_callback(publisher: MockPublisher) -> None:
+def test_remove_subscriber_with_callback(publisher: MockPublisher) -> None:
     messages: list[str] = []
     tags: list[int] = []
 
@@ -182,8 +184,8 @@ def test_remove_listener_with_callback(publisher: MockPublisher) -> None:
     # Store callback in a list to keep a reference
     callbacks = [callback]
 
-    publisher.add_listener_with_callback(MockPublisher.event1, callbacks[0])
-    publisher.remove_listener_with_callback(MockPublisher.event1, callbacks[0])
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callbacks[0])
+    publisher.remove_subscriber_with_callback(MockPublisher.event1, callbacks[0])
 
     publisher.trigger_event(MockPublisher.event1, Event1(message="test"))
     assert len(messages) == 0
@@ -194,7 +196,7 @@ def test_multiple_publishers_independence(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
     # Test that events from one publisher don't affect others
-    publisher.add_listener(MockPublisher.event1, subscriber)
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
 
     # Trigger event2 should not affect subscriber
     publisher.trigger_event(MockPublisher.event2, Event2(message="test"))

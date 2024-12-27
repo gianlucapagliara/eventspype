@@ -63,18 +63,18 @@ class EventSubscription:
     def subscribe(
         self, publisher: EventPublisher, subscriber: Any
     ) -> list[FunctionalEventSubscriber]:
-        listeners = []
+        subscribers = []
         tags = self._get_event_tags(self.event_tag)
         for event_tag in tags:
-            listeners.append(self._subscribe(publisher, event_tag, subscriber))
-        return listeners
+            subscribers.append(self._subscribe(publisher, event_tag, subscriber))
+        return subscribers
 
     def unsubscribe(
-        self, publisher: EventPublisher, listener: FunctionalEventSubscriber
+        self, publisher: EventPublisher, subscriber: FunctionalEventSubscriber
     ) -> None:
         tags = self._get_event_tags(self.event_tag)
         for event_tag in tags:
-            self._unsubscribe(publisher, listener, event_tag)
+            self._unsubscribe(publisher, subscriber, event_tag)
 
     def _get_event_tags(self, event_tag: Any) -> list[int | Enum]:
         tags = event_tag if isinstance(event_tag, list) else [event_tag]
@@ -95,16 +95,16 @@ class EventSubscription:
                 raise ValueError("Subscriber is required for callback with subscriber")
             callback = partial(self.callback, subscriber)
 
-        listener = FunctionalEventSubscriber(callback)
-        publisher.add_listener(listener)
-        return listener
+        subscriber = FunctionalEventSubscriber(callback)
+        publisher.add_subscriber(subscriber)
+        return subscriber
 
     def _unsubscribe(
         self,
         publisher: EventPublisher,
-        listener: FunctionalEventSubscriber,
+        subscriber: FunctionalEventSubscriber,
         event_tag: Any,
     ) -> None:
         if not isinstance(publisher, self.publisher_class):
             raise ValueError("Publisher type mismatch")
-        publisher.remove_listener(listener)
+        publisher.remove_subscriber(subscriber)

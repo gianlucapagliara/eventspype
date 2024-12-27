@@ -37,20 +37,20 @@ class MultiPublisher:
 
     # === Subscriptions ===
 
-    def add_listener(
-        self, publication: EventPublication, listener: EventSubscriber
+    def add_subscriber(
+        self, publication: EventPublication, subscriber: EventSubscriber
     ) -> None:
-        """Add a listener for a specific publication."""
+        """Add a subscriber for a specific publication."""
         if publication not in self.get_event_definitions().values():
             raise ValueError(f"Invalid publication: {publication}")
 
         publisher = self._get_or_create_publisher(publication)
-        publisher.add_listener(listener)
+        publisher.add_subscriber(subscriber)
 
-    def remove_listener(
-        self, publication: EventPublication, listener: EventSubscriber
+    def remove_subscriber(
+        self, publication: EventPublication, subscriber: EventSubscriber
     ) -> None:
-        """Remove a listener for a specific publication."""
+        """Remove a subscriber for a specific publication."""
         if publication not in self.get_event_definitions().values():
             raise ValueError(f"Invalid publication: {publication}")
 
@@ -58,38 +58,38 @@ class MultiPublisher:
             return
 
         publisher = self._publishers[publication]
-        publisher.remove_listener(listener)
+        publisher.remove_subscriber(subscriber)
 
         # Clean up empty publishers
-        if not publisher.get_listeners():
+        if not publisher.get_subscribers():
             del self._publishers[publication]
 
-    def add_listener_with_callback(
+    def add_subscriber_with_callback(
         self, publication: EventPublication, callback: Any
     ) -> None:
-        """Add a callback function as a listener for a specific publication."""
+        """Add a callback function as a subscriber for a specific publication."""
         if publication not in self.get_event_definitions().values():
             raise ValueError(f"Invalid publication: {publication}")
 
-        listener = FunctionalEventSubscriber(callback)
-        # Keep a reference to the listener
-        self._functional_subscribers[callback] = listener
-        self.add_listener(publication, listener)
+        subscriber = FunctionalEventSubscriber(callback)
+        # Keep a reference to the subscriber
+        self._functional_subscribers[callback] = subscriber
+        self.add_subscriber(publication, subscriber)
 
-    def remove_listener_with_callback(
+    def remove_subscriber_with_callback(
         self, publication: EventPublication, callback: Any
     ) -> None:
-        """Remove a callback function listener for a specific publication."""
+        """Remove a callback function subscriber for a specific publication."""
         if publication not in self.get_event_definitions().values():
             raise ValueError(f"Invalid publication: {publication}")
 
         if publication not in self._publishers:
             return
 
-        # Get the listener from our references
+        # Get the subscriber from our references
         if callback in self._functional_subscribers:
-            listener = self._functional_subscribers[callback]
-            self.remove_listener(publication, listener)
+            subscriber = self._functional_subscribers[callback]
+            self.remove_subscriber(publication, subscriber)
             del self._functional_subscribers[callback]
 
     # === Events ===

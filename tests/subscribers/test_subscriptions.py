@@ -71,9 +71,9 @@ def test_event_subscription_subscribe(mock_publication: EventPublication) -> Non
         callback_with_subscriber=False,
     )
 
-    listeners = subscription.subscribe(publisher, subscriber)
-    assert len(listeners) == 1
-    assert isinstance(listeners[0], FunctionalEventSubscriber)
+    subscribers = subscription.subscribe(publisher, subscriber)
+    assert len(subscribers) == 1
+    assert isinstance(subscribers[0], FunctionalEventSubscriber)
 
     # Test the subscription works
     test_message = "test"
@@ -92,23 +92,23 @@ def test_event_subscription_subscribe_multiple_events(
         MockPublisher, events, subscriber.callback, callback_with_subscriber=False
     )
 
-    listeners = subscription.subscribe(publisher, subscriber)
-    assert len(listeners) == 2
+    subscribers = subscription.subscribe(publisher, subscriber)
+    assert len(subscribers) == 2
 
-    # Test both subscriptions work - each event is received by all listeners
+    # Test both subscriptions work - each event is received by all subscribers
     test_message1 = "test1"
     test_message2 = "test2"
     publisher.trigger_event(test_message1)
     publisher.trigger_event(test_message2)
-    assert len(subscriber.calls) == 4  # Each message is received by both listeners
+    assert len(subscriber.calls) == 4  # Each message is received by both subscribers
     assert subscriber.calls[0:2] == [
         test_message1,
         test_message1,
-    ]  # First message received by both listeners
+    ]  # First message received by both subscribers
     assert subscriber.calls[2:4] == [
         test_message2,
         test_message2,
-    ]  # Second message received by both listeners
+    ]  # Second message received by both subscribers
 
 
 def test_event_subscription_unsubscribe(mock_publication: EventPublication) -> None:
@@ -121,8 +121,8 @@ def test_event_subscription_unsubscribe(mock_publication: EventPublication) -> N
         callback_with_subscriber=False,
     )
 
-    listeners = subscription.subscribe(publisher, subscriber)
-    subscription.unsubscribe(publisher, listeners[0])
+    subscribers = subscription.subscribe(publisher, subscriber)
+    subscription.unsubscribe(publisher, subscribers[0])
 
     # Test the subscription is removed
     publisher.trigger_event("test")
@@ -151,8 +151,8 @@ def test_event_subscription_without_subscriber(
     subscription = EventSubscription(
         MockPublisher, MockEvents.EVENT_1, callback, callback_with_subscriber=False
     )
-    listeners = subscription.subscribe(publisher, None)
-    assert len(listeners) == 1
+    subscribers = subscription.subscribe(publisher, None)
+    assert len(subscribers) == 1
 
 
 def test_event_subscription_missing_subscriber(
@@ -197,7 +197,7 @@ def test_unsubscribe_publisher_type_mismatch() -> None:
         EventPublisher, 1, lambda message, tag, publisher: message
     )
     wrong_publisher = CustomPublisher()
-    listener = FunctionalEventSubscriber(lambda message, tag, publisher: message)
+    subscriber = FunctionalEventSubscriber(lambda message, tag, publisher: message)
 
     with pytest.raises(ValueError, match="Publisher type mismatch"):
-        subscription._unsubscribe(wrong_publisher, listener, 1)  # type: ignore
+        subscription._unsubscribe(wrong_publisher, subscriber, 1)  # type: ignore

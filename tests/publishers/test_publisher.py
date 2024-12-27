@@ -78,23 +78,25 @@ def test_publisher_logger() -> None:
     assert publisher.logger is publisher.logger
 
 
-def test_add_listener(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
-    publisher.add_listener(subscriber)
-    listeners = publisher.get_listeners()
-    assert len(listeners) == 1
-    assert listeners[0] == subscriber
+def test_add_subscriber(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
+    publisher.add_subscriber(subscriber)
+    subscribers = publisher.get_subscribers()
+    assert len(subscribers) == 1
+    assert subscribers[0] == subscriber
 
 
-def test_remove_listener(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
-    publisher.add_listener(subscriber)
-    publisher.remove_listener(subscriber)
-    listeners = publisher.get_listeners()
-    assert len(listeners) == 0
+def test_remove_subscriber(
+    publisher: EventPublisher, subscriber: MockSubscriber
+) -> None:
+    publisher.add_subscriber(subscriber)
+    publisher.remove_subscriber(subscriber)
+    subscribers = publisher.get_subscribers()
+    assert len(subscribers) == 0
 
 
 def test_trigger_event(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
     test_message = Event1(message="test message")
-    publisher.add_listener(subscriber)
+    publisher.add_subscriber(subscriber)
     publisher.trigger_event(test_message)
 
     assert len(subscriber.received_messages) == 1
@@ -109,8 +111,8 @@ def test_multiple_subscribers() -> None:
     subscriber1 = MockSubscriber()
     subscriber2 = MockSubscriber()
 
-    publisher.add_listener(subscriber1)
-    publisher.add_listener(subscriber2)
+    publisher.add_subscriber(subscriber1)
+    publisher.add_subscriber(subscriber2)
 
     test_message = Event1(message="test message")
     publisher.trigger_event(test_message)
@@ -122,23 +124,23 @@ def test_multiple_subscribers() -> None:
 def test_invalid_event_type(
     publisher: EventPublisher, subscriber: MockSubscriber
 ) -> None:
-    publisher.add_listener(subscriber)
+    publisher.add_subscriber(subscriber)
     with pytest.raises(ValueError, match="Invalid event type"):
         publisher.trigger_event("wrong type")
 
 
-def test_remove_nonexistent_listener(
+def test_remove_nonexistent_subscriber(
     publisher: EventPublisher, subscriber: MockSubscriber
 ) -> None:
-    publisher.remove_listener(subscriber)
-    assert len(publisher.get_listeners()) == 0
+    publisher.remove_subscriber(subscriber)
+    assert len(publisher.get_subscribers()) == 0
 
 
 def test_trigger_event_with_error(caplog: Any) -> None:
     publication = EventPublication(MockEvents.EVENT_1, Event1)
     publisher = EventPublisher(publication)
     error_subscriber = ErrorSubscriber()
-    publisher.add_listener(error_subscriber)
+    publisher.add_subscriber(error_subscriber)
 
     with caplog.at_level(logging.ERROR):
         publisher.trigger_event(Event1(message="test"))
@@ -149,13 +151,13 @@ def test_trigger_event_with_error(caplog: Any) -> None:
 
 
 @patch("random.random")
-def test_gc_on_add_listener(
+def test_gc_on_add_subscriber(
     mock_random: Any, publisher: EventPublisher, subscriber: MockSubscriber
 ) -> None:
     # Force GC to run by setting random value below threshold
-    mock_random.return_value = 0.001  # Below ADD_LISTENER_GC_PROBABILITY
+    mock_random.return_value = 0.001  # Below ADD_SUBSCRIBER_GC_PROBABILITY
 
-    # Add a dead listener first
+    # Add a dead subscriber first
     class TempSubscriber(EventSubscriber):
         def call(
             self, arg: Any, current_event_tag: int, current_event_caller: EventPublisher
@@ -163,13 +165,13 @@ def test_gc_on_add_listener(
             pass
 
     temp = TempSubscriber()
-    publisher.add_listener(temp)
-    del temp  # Make the listener dead
+    publisher.add_subscriber(temp)
+    del temp  # Make the subscriber dead
 
-    # Add new listener, which should trigger GC
-    publisher.add_listener(subscriber)
+    # Add new subscriber, which should trigger GC
+    publisher.add_subscriber(subscriber)
 
-    # Only the new listener should remain
-    listeners = publisher.get_listeners()
-    assert len(listeners) == 1
-    assert listeners[0] == subscriber
+    # Only the new subscriber should remain
+    subscribers = publisher.get_subscribers()
+    assert len(subscribers) == 1
+    assert subscribers[0] == subscriber

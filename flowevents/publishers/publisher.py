@@ -9,18 +9,18 @@ from .publications import EventPublication
 
 class EventPublisher:
     """
-    EventPublisher with weak references for a single event type. This avoids the lapsed listener problem by periodically
-    performing GC on dead event listeners.
+    EventPublisher with weak references for a single event type. This avoids the lapsed subscriber problem by periodically
+    performing GC on dead event subscribers.
 
-    Dead listener cleanup is done by calling _remove_dead_listeners(), which checks whether the listener weak references are
-    alive or not, and removes the dead ones. Each call to _remove_dead_listeners() takes O(n).
+    Dead subscriber cleanup is done by calling _remove_dead_subscribers(), which checks whether the subscriber weak references are
+    alive or not, and removes the dead ones. Each call to _remove_dead_subscribers() takes O(n).
     """
 
-    ADD_LISTENER_GC_PROBABILITY = 0.005
+    ADD_SUBSCRIBER_GC_PROBABILITY = 0.005
 
     def __init__(self, publication: EventPublication) -> None:
         self._publication = publication
-        self._listeners: set[weakref.ReferenceType[EventSubscriber]] = set()
+        self._subscribers: set[weakref.ReferenceType[EventSubscriber]] = set()
         self._logger: logging.Logger | None = None
 
     @property
@@ -33,65 +33,65 @@ class EventPublisher:
             self._logger = logging.getLogger(__name__)
         return self._logger
 
-    def add_listener(self, listener: EventSubscriber) -> None:
-        """Add a listener for this publisher's event."""
-        # Create weak reference to the listener
-        listener_ref = weakref.ref(listener)
-        self._listeners.add(listener_ref)
+    def add_subscriber(self, subscriber: EventSubscriber) -> None:
+        """Add a subscriber for this publisher's event."""
+        # Create weak reference to the subscriber
+        subscriber_ref = weakref.ref(subscriber)
+        self._subscribers.add(subscriber_ref)
 
         # Randomly perform garbage collection
-        if random.random() < self.ADD_LISTENER_GC_PROBABILITY:
-            self._remove_dead_listeners()
+        if random.random() < self.ADD_SUBSCRIBER_GC_PROBABILITY:
+            self._remove_dead_subscribers()
 
-    def remove_listener(self, listener: EventSubscriber) -> None:
-        """Remove a listener."""
+    def remove_subscriber(self, subscriber: EventSubscriber) -> None:
+        """Remove a subscriber."""
         # Create a temporary weak reference for comparison
-        listener_ref = weakref.ref(listener)
+        subscriber_ref = weakref.ref(subscriber)
 
-        # Remove the listener if it exists
-        self._listeners.discard(listener_ref)
+        # Remove the subscriber if it exists
+        self._subscribers.discard(subscriber_ref)
 
-        # Clean up dead listeners
-        self._remove_dead_listeners()
+        # Clean up dead subscribers
+        self._remove_dead_subscribers()
 
-    def get_listeners(self) -> list[EventSubscriber]:
-        """Get all active listeners."""
-        self._remove_dead_listeners()
+    def get_subscribers(self) -> list[EventSubscriber]:
+        """Get all active subscribers."""
+        self._remove_dead_subscribers()
 
-        # Return only the listeners that are still alive
+        # Return only the subscribers that are still alive
         return [
-            listener
-            for listener in (ref() for ref in self._listeners)
-            if listener is not None
+            subscriber
+            for subscriber in (ref() for ref in self._subscribers)
+            if subscriber is not None
         ]
 
     def trigger_event(self, message: Any) -> None:
-        """Trigger an event, notifying all listeners with the given message."""
+        """Trigger an event, notifying all subscribers with the given message."""
         # Validate event type
         if not isinstance(message, self._publication.event_class):
             raise ValueError(
                 f"Invalid event type: expected {self._publication.event_class}, got {type(message)}"
             )
 
-        self._remove_dead_listeners()
+        self._remove_dead_subscribers()
 
-        # Make a copy of the listeners to avoid modification during iteration
-        listeners = self._listeners.copy()
+        # Make a copy of the subscribers to avoid modification during iteration
+        subscribers = self._subscribers.copy()
 
-        for listener_ref in listeners:
-            listener = listener_ref()
-            if listener is None:
+        for subscriber_ref in subscribers:
+            subscriber = subscriber_ref()
+            if subscriber is None:
                 continue
 
             try:
-                listener(message, self._publication.event_tag, self)
+                subscriber(message, self._publication.event_tag, self)
             except Exception:
                 self._log_exception(message)
 
-    def _remove_dead_listeners(self) -> None:
-        """Remove any dead listeners."""
+    def _remove_dead_subscribers(self) -> None:
+        """Remove any dead subscribers."""
         # Remove any dead references
-        self._listeners = {ref for ref in self._listeners if ref() is not None}
+        self._subscribers = {ref for ref in self._subscribers if ref() is not None}
 
     def _log_exception(self, arg: Any) -> None:
         """Log any exceptions that occur during event processing."""

@@ -75,8 +75,8 @@ def test_multi_subscriber_add_subscription(mock_publication: EventPublication) -
     # Add subscription
     subscriber.add_subscription(subscriber.event1, publisher)
 
-    assert publisher in subscriber.listeners
-    assert subscriber.event1 in subscriber.listeners[publisher]
+    assert publisher in subscriber.subscribers
+    assert subscriber.event1 in subscriber.subscribers[publisher]
 
     # Test the subscription works
     publisher.trigger_event("test")
@@ -95,7 +95,7 @@ def test_multi_subscriber_add_duplicate_subscription(
     subscriber.add_subscription(subscriber.event1, publisher)
 
     # Should only be added once
-    assert len(subscriber.listeners[publisher]) == 1
+    assert len(subscriber.subscribers[publisher]) == 1
 
 
 def test_multi_subscriber_add_invalid_subscription(
@@ -123,7 +123,7 @@ def test_multi_subscriber_remove_subscription(
     subscriber.add_subscription(subscriber.event1, publisher)
     subscriber.remove_subscription(subscriber.event1, publisher)
 
-    assert len(subscriber.listeners[publisher]) == 0
+    assert len(subscriber.subscribers[publisher]) == 0
 
     # Test the subscription is removed
     publisher.trigger_event("test")
@@ -140,7 +140,7 @@ def test_multi_subscriber_remove_nonexistent_subscription(
     subscriber.remove_subscription(subscriber.event1, publisher)
 
     # Should not raise any error
-    assert len(subscriber.listeners[publisher]) == 0
+    assert len(subscriber.subscribers[publisher]) == 0
 
 
 def test_multi_subscriber_remove_invalid_subscription(
