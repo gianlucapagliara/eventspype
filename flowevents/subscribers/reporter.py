@@ -1,6 +1,6 @@
 import dataclasses
 import logging
-from typing import Any, Protocol, TypeVar, cast, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from .subscriber import EventSubscriber
 
@@ -8,11 +8,6 @@ from .subscriber import EventSubscriber
 @runtime_checkable
 class HasAsDict(Protocol):
     def _asdict(self) -> dict[str, Any]: ...
-
-
-@runtime_checkable
-class HasDataclass(Protocol):
-    __dataclass_fields__: dict[str, Any]
 
 
 T = TypeVar("T")
@@ -35,6 +30,13 @@ class ReportingEventSubscriber(EventSubscriber):
             cls._logger = logging.getLogger(__name__)
         return cls._logger
 
+    def _get_event_name(self, obj: Any) -> str:
+        """Get the event name from an object safely."""
+        try:
+            return type(obj).__name__
+        except Exception:
+            return "UnknownEvent"
+
     def call(
         self,
         event_object: Any,
@@ -51,22 +53,16 @@ class ReportingEventSubscriber(EventSubscriber):
         """
         try:
             # Convert event object to dictionary
-            if isinstance(event_object, HasDataclass):
-                event_dict = dataclasses.asdict(cast(HasDataclass, event_object))
+            if dataclasses.is_dataclass(type(event_object)):
+                event_dict = dataclasses.asdict(event_object)
             elif isinstance(event_object, HasAsDict):
                 event_dict = event_object._asdict()
             else:
                 event_dict = {"value": str(event_object)}
 
-            # Get event name safely
-            try:
-                event_name = event_object.__class__.__name__
-            except (AttributeError, TypeError):
-                event_name = "UnknownEvent"
-
             # Add event metadata
             metadata: dict[str, Any] = {
-                "event_name": event_name,
+                "event_name": self._get_event_name(event_object),
                 "event_source": self.event_source,
                 "event_tag": current_event_tag,
             }
