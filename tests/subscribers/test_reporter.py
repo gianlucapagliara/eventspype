@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from flowevents.subscribers.reporter import ReportingEventSubscriber
+from eventspype.subscribers.reporter import ReportingEventSubscriber
 
 
 @dataclass

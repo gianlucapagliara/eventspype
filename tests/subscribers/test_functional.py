@@ -1,4 +1,4 @@
-from flowevents.subscribers.functional import FunctionalEventSubscriber
+from eventspype.subscribers.functional import FunctionalEventSubscriber
 
 
 def test_functional_subscriber_callback() -> None:

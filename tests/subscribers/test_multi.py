@@ -5,10 +5,10 @@ from typing import Any
 
 import pytest
 
-from flowevents.publishers.publications import EventPublication
-from flowevents.publishers.publisher import EventPublisher
-from flowevents.subscribers.multi import MultiSubscriber
-from flowevents.subscribers.subscriptions import EventSubscription
+from eventspype.publishers.publications import EventPublication
+from eventspype.publishers.publisher import EventPublisher
+from eventspype.subscribers.multi import MultiSubscriber
+from eventspype.subscribers.subscriptions import EventSubscription
 
 
 class MockEvents(Enum):

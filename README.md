@@ -1,10 +1,10 @@
-# FlowEvents
+# Events Pypeline
 
-[![CI](https://github.com/gianlucapagliara/flowevents/actions/workflows/ci.yml/badge.svg)](https://github.com/gianlucapagliara/flowevents/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/gianlucapagliara/flowevents/branch/main/graph/badge.svg)](https://codecov.io/gh/gianlucapagliara/flowevents)
+[![CI](https://github.com/gianlucapagliara/eventspype/actions/workflows/ci.yml/badge.svg)](https://github.com/gianlucapagliara/eventspype/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/gianlucapagliara/eventspype/branch/main/graph/badge.svg)](https://codecov.io/gh/gianlucapagliara/eventspype)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
-A lightweight and type-safe Python framework for building event-driven applications. FlowEvents provides a clean publisher-subscriber pattern implementation, making it easy to create decoupled and maintainable event-driven systems.
+A lightweight and type-safe Python framework for building event-driven applications. eventspype provides a clean publisher-subscriber pattern implementation, making it easy to create decoupled and maintainable event-driven systems.
 
 ## Features
 
@@ -19,10 +19,10 @@ A lightweight and type-safe Python framework for building event-driven applicati
 
 ```bash
 # Using pip
-pip install flowevents
+pip install eventspype
 
 # Using poetry
-poetry add flowevents
+poetry add eventspype
 ```
 
 ## License

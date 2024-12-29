@@ -6,9 +6,9 @@ from unittest.mock import patch
 
 import pytest
 
-from flowevents.publishers.publications import EventPublication
-from flowevents.publishers.publisher import EventPublisher
-from flowevents.subscribers.subscriber import EventSubscriber
+from eventspype.publishers.publications import EventPublication
+from eventspype.publishers.publisher import EventPublisher
+from eventspype.subscribers.subscriber import EventSubscriber
 
 
 class MockEvents(Enum):
@@ -73,7 +73,7 @@ def test_publisher_name(publisher: EventPublisher) -> None:
 
 def test_publisher_logger() -> None:
     publisher = EventPublisher(EventPublication(MockEvents.EVENT_1, Event1))
-    assert publisher.logger.name == "flowevents.publishers.publisher"
+    assert publisher.logger.name == "eventspype.publishers.publisher"
     # Test logger caching
     assert publisher.logger is publisher.logger
 

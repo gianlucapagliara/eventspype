@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "flowevents"
+name = "eventspype"
 version = "0.1.0"
 description = "A Python framework for building event-driven applications with a clean publisher-subscriber pattern implementation."
 authors = ["Gianluca Pagliara <pagliara.gianluca@gmail.com>"]

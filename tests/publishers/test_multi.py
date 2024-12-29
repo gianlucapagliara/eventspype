@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 
-from flowevents.publishers.multi import MultiPublisher
-from flowevents.publishers.publications import EventPublication
-from flowevents.subscribers.subscriber import EventSubscriber
+from eventspype.publishers.multi import MultiPublisher
+from eventspype.publishers.publications import EventPublication
+from eventspype.subscribers.subscriber import EventSubscriber
 
 
 class MockEvents(Enum):
