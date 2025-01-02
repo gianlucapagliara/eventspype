@@ -1,9 +1,9 @@
 from typing import Any
 
-from ..subscribers.functional import FunctionalEventSubscriber
-from ..subscribers.subscriber import EventSubscriber
-from .publications import EventPublication
-from .publisher import EventPublisher
+from eventspype.pub.publication import EventPublication
+from eventspype.pub.publisher import EventPublisher
+from eventspype.sub.functional import FunctionalEventSubscriber
+from eventspype.sub.subscriber import EventSubscriber
 
 
 class MultiPublisher:

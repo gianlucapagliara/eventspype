@@ -5,8 +5,8 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
 
-from ..publishers.publisher import EventPublisher
-from .subscriptions import EventSubscription
+from eventspype.pub.publisher import EventPublisher
+from eventspype.sub.subscription import EventSubscription
 
 T = TypeVar("T")
 

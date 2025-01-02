@@ -3,8 +3,8 @@ from enum import Enum
 from functools import partial
 from typing import Any, TypeVar
 
-from ..publishers.publisher import EventPublisher
-from .functional import FunctionalEventSubscriber
+from eventspype.pub.publisher import EventPublisher
+from eventspype.sub.functional import FunctionalEventSubscriber
 
 T = TypeVar("T")
 

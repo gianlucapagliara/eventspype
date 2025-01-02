@@ -3,8 +3,8 @@ import random
 import weakref
 from typing import Any
 
-from ..subscribers.subscriber import EventSubscriber
-from .publications import EventPublication
+from eventspype.pub.publication import EventPublication
+from eventspype.sub.subscriber import EventSubscriber
 
 
 class EventPublisher:

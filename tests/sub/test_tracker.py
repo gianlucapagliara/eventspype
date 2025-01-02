@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from eventspype.subscribers.tracker import TrackingEventSubscriber
+from eventspype.sub.tracker import TrackingEventSubscriber
 
 
 @dataclass

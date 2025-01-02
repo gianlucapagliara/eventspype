@@ -2,7 +2,7 @@ import dataclasses
 import logging
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from .subscriber import EventSubscriber
+from eventspype.sub.subscriber import EventSubscriber
 
 
 @runtime_checkable

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from eventspype.subscribers.reporter import ReportingEventSubscriber
+from eventspype.sub.reporter import ReportingEventSubscriber
 
 
 @dataclass

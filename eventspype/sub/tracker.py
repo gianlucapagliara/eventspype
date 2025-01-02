@@ -4,7 +4,7 @@ from typing import Any
 
 from async_timeout import timeout
 
-from .subscriber import EventSubscriber
+from eventspype.sub.subscriber import EventSubscriber
 
 
 class TrackingEventSubscriber(EventSubscriber):

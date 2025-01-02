@@ -3,10 +3,10 @@ from typing import Any
 
 import pytest
 
-from eventspype.publishers.publications import EventPublication
-from eventspype.publishers.publisher import EventPublisher
-from eventspype.subscribers.functional import FunctionalEventSubscriber
-from eventspype.subscribers.subscriptions import EventSubscription
+from eventspype.pub.publication import EventPublication
+from eventspype.pub.publisher import EventPublisher
+from eventspype.sub.functional import FunctionalEventSubscriber
+from eventspype.sub.subscription import EventSubscription
 
 
 class MockEvents(Enum):

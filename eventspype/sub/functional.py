@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from .subscriber import EventSubscriber
+from eventspype.sub.subscriber import EventSubscriber
 
 
 class FunctionalEventSubscriber(EventSubscriber):

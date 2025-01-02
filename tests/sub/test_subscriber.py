@@ -1,6 +1,6 @@
 import pytest
 
-from eventspype.subscribers.subscriber import EventSubscriber, OwnedEventSubscriber
+from eventspype.sub.subscriber import EventSubscriber, OwnedEventSubscriber
 
 
 class TestEventSubscriber:
