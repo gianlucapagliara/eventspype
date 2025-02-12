@@ -115,7 +115,11 @@ class EventSubscription:
         if self.callback_with_subscriber:
             if subscriber is None:
                 raise ValueError("Subscriber is required for callback with subscriber")
-            callback = partial(self.callback, subscriber)
+            if hasattr(self.callback, "__name__"):
+                callback = getattr(subscriber, self.callback.__name__)
+            else:
+                callback = self.callback
+            callback = partial(callback, subscriber)
 
         subscriber = FunctionalEventSubscriber(
             callback, with_event_info=self._callback_with_event_info
