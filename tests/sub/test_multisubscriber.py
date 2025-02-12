@@ -79,7 +79,7 @@ def test_multi_subscriber_add_subscription(mock_publication: EventPublication) -
     assert subscriber.event1 in subscriber.subscribers[publisher]
 
     # Test the subscription works
-    publisher.trigger_event("test")
+    publisher.publish("test")
     assert len(subscriber.calls) == 1
     assert subscriber.calls[0] == "test"
 
@@ -126,7 +126,7 @@ def test_multi_subscriber_remove_subscription(
     assert len(subscriber.subscribers[publisher]) == 0
 
     # Test the subscription is removed
-    publisher.trigger_event("test")
+    publisher.publish("test")
     assert len(subscriber.calls) == 0
 
 
@@ -187,7 +187,7 @@ def test_multi_subscriber_logging_levels(
         publisher = MockPublisher(mock_publication)
 
         subscriber.add_subscription(subscriber.event1, publisher)
-        publisher.trigger_event("test message")
+        publisher.publish("test message")
 
         assert len(caplog.records) >= 1
         assert any("[Test] test message" in record.message for record in caplog.records)

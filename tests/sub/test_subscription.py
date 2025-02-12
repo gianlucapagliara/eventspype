@@ -77,7 +77,7 @@ def test_event_subscription_subscribe(mock_publication: EventPublication) -> Non
 
     # Test the subscription works
     test_message = "test"
-    publisher.trigger_event(test_message)
+    publisher.publish(test_message)
     assert len(subscriber.calls) == 1
     assert subscriber.calls[0] == test_message
 
@@ -98,8 +98,8 @@ def test_event_subscription_subscribe_multiple_events(
     # Test both subscriptions work - each event is received by all subscribers
     test_message1 = "test1"
     test_message2 = "test2"
-    publisher.trigger_event(test_message1)
-    publisher.trigger_event(test_message2)
+    publisher.publish(test_message1)
+    publisher.publish(test_message2)
     assert len(subscriber.calls) == 4  # Each message is received by both subscribers
     assert subscriber.calls[0:2] == [
         test_message1,
@@ -125,7 +125,7 @@ def test_event_subscription_unsubscribe(mock_publication: EventPublication) -> N
     subscription.unsubscribe(publisher, subscribers[0])
 
     # Test the subscription is removed
-    publisher.trigger_event("test")
+    publisher.publish("test")
     assert len(subscriber.calls) == 0
 
 
@@ -193,11 +193,9 @@ def test_unsubscribe_publisher_type_mismatch() -> None:
     class CustomPublisher:
         pass
 
-    subscription = EventSubscription(
-        EventPublisher, 1, lambda message, tag, publisher: message
-    )
+    subscription = EventSubscription(EventPublisher, 1, lambda event: event.arg)
     wrong_publisher = CustomPublisher()
-    subscriber = FunctionalEventSubscriber(lambda message, tag, publisher: message)
+    subscriber = FunctionalEventSubscriber(lambda event: event.arg)
 
     with pytest.raises(ValueError, match="Publisher type mismatch"):
         subscription._unsubscribe(wrong_publisher, subscriber, 1)  # type: ignore
