@@ -105,32 +105,32 @@ def test_remove_nonexistent_subscriber(
     publisher.remove_subscriber(MockPublisher.event1, subscriber)
 
 
-def test_trigger_event(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
+def test_publish_event(publisher: MockPublisher, subscriber: MockSubscriber) -> None:
     publisher.add_subscriber(MockPublisher.event1, subscriber)
     event = Event1(message="test")
-    publisher.trigger_event(MockPublisher.event1, event)
+    publisher.publish(MockPublisher.event1, event)
 
     assert len(subscriber.received_messages) == 1
     assert subscriber.received_messages[0] == event
     assert subscriber.received_tags[0] == MockEvents.EVENT_1.value
 
 
-def test_trigger_event_invalid_type(
+def test_publish_event_invalid_type(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
     publisher.add_subscriber(MockPublisher.event1, subscriber)
     with pytest.raises(ValueError, match="Invalid event type"):
-        publisher.trigger_event(MockPublisher.event1, Event2(message="wrong type"))
+        publisher.publish(MockPublisher.event1, Event2(message="wrong type"))
 
 
-def test_trigger_event_invalid_publication(
+def test_publish_event_invalid_publication(
     publisher: MockPublisher, subscriber: MockSubscriber
 ) -> None:
     invalid_pub = EventPublication(
         MockEvents.EVENT_1, Event1
     )  # Not defined in TestPublisher
     with pytest.raises(ValueError, match="Invalid publication"):
-        publisher.trigger_event(invalid_pub, Event1(message="test"))
+        publisher.publish(invalid_pub, Event1(message="test"))
 
 
 def test_add_subscriber_with_callback(publisher: MockPublisher) -> None:
@@ -164,7 +164,7 @@ def test_add_subscriber_with_callback(publisher: MockPublisher) -> None:
 
     event = Event1(message="test")
     print(f"Triggering event: {event}")
-    publisher.trigger_event(MockPublisher.event1, event)
+    publisher.publish(MockPublisher.event1, event)
 
     assert len(messages) == 1
     assert messages[0] == "test"
@@ -187,7 +187,7 @@ def test_remove_subscriber_with_callback(publisher: MockPublisher) -> None:
     publisher.add_subscriber_with_callback(MockPublisher.event1, callbacks[0])
     publisher.remove_subscriber_with_callback(MockPublisher.event1, callbacks[0])
 
-    publisher.trigger_event(MockPublisher.event1, Event1(message="test"))
+    publisher.publish(MockPublisher.event1, Event1(message="test"))
     assert len(messages) == 0
     assert len(tags) == 0
 
@@ -199,9 +199,40 @@ def test_multiple_publishers_independence(
     publisher.add_subscriber(MockPublisher.event1, subscriber)
 
     # Trigger event2 should not affect subscriber
-    publisher.trigger_event(MockPublisher.event2, Event2(message="test"))
+    publisher.publish(MockPublisher.event2, Event2(message="test"))
     assert len(subscriber.received_messages) == 0
 
     # Trigger event1 should affect subscriber
-    publisher.trigger_event(MockPublisher.event1, Event1(message="test"))
+    publisher.publish(MockPublisher.event1, Event1(message="test"))
     assert len(subscriber.received_messages) == 1
+
+
+class BasePublisher(MultiPublisher):
+    base_event = EventPublication(MockEvents.EVENT_1, Event1)
+
+
+class ChildPublisher(BasePublisher):
+    # Override the base event with a different type
+    base_event = EventPublication(MockEvents.EVENT_1, Event2)
+    # Add a new event
+    child_event = EventPublication(MockEvents.EVENT_2, Event2)
+
+
+def test_event_definition_inheritance() -> None:
+    # Test base class definitions
+    base_defs = BasePublisher.get_event_definitions()
+    assert len(base_defs) == 1
+    assert "base_event" in base_defs
+    assert base_defs["base_event"].event_class == Event1
+
+    # Test child class definitions
+    child_defs = ChildPublisher.get_event_definitions()
+    assert len(child_defs) == 2
+    # Child's override should take precedence
+    assert child_defs["base_event"].event_class == Event2
+    assert "child_event" in child_defs
+
+    # Test that child's event is valid
+    child = ChildPublisher()
+    assert child.is_publication_valid(ChildPublisher.child_event)
+    assert child.is_publication_valid(ChildPublisher.base_event)

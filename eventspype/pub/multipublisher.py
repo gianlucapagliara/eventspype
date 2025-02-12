@@ -1,5 +1,6 @@
 from typing import Any
 
+from eventspype.event import EventTag
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.functional import FunctionalEventSubscriber
@@ -22,12 +23,39 @@ class MultiPublisher:
 
     @classmethod
     def get_event_definitions(cls) -> dict[str, EventPublication]:
-        """Get all event publications defined in the class."""
-        result = {}
-        for name, value in cls.__dict__.items():
-            if isinstance(value, EventPublication):
-                result[name] = value
+        """Get all event publications defined in the class and its parent classes."""
+        result: dict[str, EventPublication] = {}
+        # Traverse the class hierarchy in method resolution order
+        for base_class in cls.__mro__:
+            for name, value in base_class.__dict__.items():
+                if isinstance(value, EventPublication):
+                    # Only add if not already present (child class definitions take precedence)
+                    if name in result:
+                        continue
+                    result[name] = value
         return result
+
+    @classmethod
+    def is_publication_valid(
+        cls, publication: EventPublication, raise_error: bool = True
+    ) -> bool:
+        """Check if a publication is valid."""
+        if publication not in cls.get_event_definitions().values():
+            if raise_error:
+                raise ValueError(f"Invalid publication: {publication}")
+            return False
+        return True
+
+    @classmethod
+    def get_event_definition_by_tag(cls, event_tag: EventTag) -> EventPublication:
+        """Get the event definition by event tag."""
+        publication = EventPublication(event_tag, Any)
+        for _, value in cls.get_event_definitions().items():
+            if value.event_tag == publication.event_tag:
+                return value
+        raise ValueError(f"No event definition found for tag: {event_tag}")
+
+    # === Subscriptions ===
 
     def _get_or_create_publisher(self, publication: EventPublication) -> EventPublisher:
         """Get or create a dedicated publisher for a publication."""
@@ -35,14 +63,11 @@ class MultiPublisher:
             self._publishers[publication] = EventPublisher(publication)
         return self._publishers[publication]
 
-    # === Subscriptions ===
-
     def add_subscriber(
         self, publication: EventPublication, subscriber: EventSubscriber
     ) -> None:
         """Add a subscriber for a specific publication."""
-        if publication not in self.get_event_definitions().values():
-            raise ValueError(f"Invalid publication: {publication}")
+        self.is_publication_valid(publication, raise_error=True)
 
         publisher = self._get_or_create_publisher(publication)
         publisher.add_subscriber(subscriber)
@@ -51,8 +76,7 @@ class MultiPublisher:
         self, publication: EventPublication, subscriber: EventSubscriber
     ) -> None:
         """Remove a subscriber for a specific publication."""
-        if publication not in self.get_event_definitions().values():
-            raise ValueError(f"Invalid publication: {publication}")
+        self.is_publication_valid(publication, raise_error=True)
 
         if publication not in self._publishers:
             return
@@ -68,10 +92,10 @@ class MultiPublisher:
         self, publication: EventPublication, callback: Any
     ) -> None:
         """Add a callback function as a subscriber for a specific publication."""
-        if publication not in self.get_event_definitions().values():
-            raise ValueError(f"Invalid publication: {publication}")
+        self.is_publication_valid(publication, raise_error=True)
 
         subscriber = FunctionalEventSubscriber(callback)
+
         # Keep a reference to the subscriber
         self._functional_subscribers[callback] = subscriber
         self.add_subscriber(publication, subscriber)
@@ -80,8 +104,7 @@ class MultiPublisher:
         self, publication: EventPublication, callback: Any
     ) -> None:
         """Remove a callback function subscriber for a specific publication."""
-        if publication not in self.get_event_definitions().values():
-            raise ValueError(f"Invalid publication: {publication}")
+        self.is_publication_valid(publication, raise_error=True)
 
         if publication not in self._publishers:
             return
@@ -94,13 +117,14 @@ class MultiPublisher:
 
     # === Events ===
 
-    def trigger_event(self, publication: EventPublication, event: Any) -> None:
+    def publish(
+        self, publication: EventPublication, event: Any, caller: Any | None = None
+    ) -> None:
         """Trigger an event for a specific publication."""
-        if publication not in self.get_event_definitions().values():
-            raise ValueError(f"Invalid publication: {publication}")
+        self.is_publication_valid(publication, raise_error=True)
 
         if publication not in self._publishers:
             return
 
         # Use the dedicated publisher to trigger the event
-        self._publishers[publication].trigger_event(event)
+        self._publishers[publication].publish(event, caller or self)

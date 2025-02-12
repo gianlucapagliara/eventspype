@@ -21,10 +21,16 @@ class MultiSubscriber:
 
     @classmethod
     def get_event_definitions(cls) -> dict[str, EventSubscription]:
-        result = {}
-        for name, value in cls.__dict__.items():
-            if isinstance(value, EventSubscription):
-                result[name] = value
+        """Get all event subscriptions defined in the class and its parent classes."""
+        result: dict[str, EventSubscription] = {}
+        # Traverse the class hierarchy in method resolution order
+        for base_class in cls.__mro__:
+            for name, value in base_class.__dict__.items():
+                if isinstance(value, EventSubscription):
+                    # Only add if not already present (child class definitions take precedence)
+                    if name in result:
+                        continue
+                    result[name] = value
         return result
 
     # === Properties ===
