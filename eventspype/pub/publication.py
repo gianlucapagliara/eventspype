@@ -1,9 +1,11 @@
 from enum import Enum
 from typing import Any
 
+from eventspype.event import EventTag
+
 
 class EventPublication:
-    def __init__(self, event_tag: Enum | int | str, event_class: Any) -> None:
+    def __init__(self, event_tag: EventTag, event_class: Any) -> None:
         self.original_tag = event_tag
         self.event_class = event_class
 
@@ -16,4 +18,4 @@ class EventPublication:
         self.event_tag: int = event_tag
 
     def __hash__(self) -> int:
-        return hash((self.event_tag, self.event_class))
+        return hash(self.event_tag)

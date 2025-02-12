@@ -94,10 +94,10 @@ def test_remove_subscriber(
     assert len(subscribers) == 0
 
 
-def test_trigger_event(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
+def test_publish_event(publisher: EventPublisher, subscriber: MockSubscriber) -> None:
     test_message = Event1(message="test message")
     publisher.add_subscriber(subscriber)
-    publisher.trigger_event(test_message)
+    publisher.publish(test_message)
 
     assert len(subscriber.received_messages) == 1
     assert subscriber.received_messages[0] == test_message
@@ -115,7 +115,7 @@ def test_multiple_subscribers() -> None:
     publisher.add_subscriber(subscriber2)
 
     test_message = Event1(message="test message")
-    publisher.trigger_event(test_message)
+    publisher.publish(test_message)
 
     assert subscriber1.received_messages == [test_message]
     assert subscriber2.received_messages == [test_message]
@@ -126,7 +126,7 @@ def test_invalid_event_type(
 ) -> None:
     publisher.add_subscriber(subscriber)
     with pytest.raises(ValueError, match="Invalid event type"):
-        publisher.trigger_event("wrong type")
+        publisher.publish("wrong type")
 
 
 def test_remove_nonexistent_subscriber(
@@ -136,14 +136,14 @@ def test_remove_nonexistent_subscriber(
     assert len(publisher.get_subscribers()) == 0
 
 
-def test_trigger_event_with_error(caplog: Any) -> None:
+def test_publish_event_with_error(caplog: Any) -> None:
     publication = EventPublication(MockEvents.EVENT_1, Event1)
     publisher = EventPublisher(publication)
     error_subscriber = ErrorSubscriber()
     publisher.add_subscriber(error_subscriber)
 
     with caplog.at_level(logging.ERROR):
-        publisher.trigger_event(Event1(message="test"))
+        publisher.publish(Event1(message="test"))
 
         assert len(caplog.records) == 1
         assert "Unexpected error while processing event" in caplog.records[0].message

@@ -65,12 +65,12 @@ class EventPublisher:
             if subscriber is not None
         ]
 
-    def trigger_event(self, message: Any) -> None:
+    def publish(self, event: Any, caller: Any | None = None) -> None:
         """Trigger an event, notifying all subscribers with the given message."""
         # Validate event type
-        if not isinstance(message, self._publication.event_class):
+        if not isinstance(event, self._publication.event_class):
             raise ValueError(
-                f"Invalid event type: expected {self._publication.event_class}, got {type(message)}"
+                f"Invalid event type: expected {self._publication.event_class}, got {type(event)}"
             )
 
         self._remove_dead_subscribers()
@@ -84,9 +84,9 @@ class EventPublisher:
                 continue
 
             try:
-                subscriber(message, self._publication.event_tag, self)
+                subscriber(event, self._publication.event_tag, caller or self)
             except Exception:
-                self._log_exception(message)
+                self._log_exception(event)
 
     def _remove_dead_subscribers(self) -> None:
         """Remove any dead subscribers."""
