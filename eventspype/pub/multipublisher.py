@@ -89,12 +89,14 @@ class MultiPublisher:
             del self._publishers[publication]
 
     def add_subscriber_with_callback(
-        self, publication: EventPublication, callback: Any
+        self, publication: EventPublication, callback: Any, with_event_info: bool = True
     ) -> None:
         """Add a callback function as a subscriber for a specific publication."""
         self.is_publication_valid(publication, raise_error=True)
 
-        subscriber = FunctionalEventSubscriber(callback)
+        subscriber = FunctionalEventSubscriber(
+            callback, with_event_info=with_event_info
+        )
 
         # Keep a reference to the subscriber
         self._functional_subscribers[callback] = subscriber

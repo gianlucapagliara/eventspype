@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "eventspype"
-version = "1.0.2"
+version = "1.0.3"
 description = "A Python framework for building event-driven applications with a clean publisher-subscriber pattern implementation."
 authors = ["Gianluca Pagliara <pagliara.gianluca@gmail.com>"]
 readme = "README.md"

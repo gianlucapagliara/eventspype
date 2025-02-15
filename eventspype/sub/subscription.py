@@ -118,8 +118,7 @@ class EventSubscription:
             if hasattr(self.callback, "__name__"):
                 callback = getattr(subscriber, self.callback.__name__)
             else:
-                callback = self.callback
-            callback = partial(callback, subscriber)
+                callback = partial(callback, subscriber)
 
         subscriber = FunctionalEventSubscriber(
             callback, with_event_info=self._callback_with_event_info
