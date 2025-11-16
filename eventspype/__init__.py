@@ -12,6 +12,7 @@ from eventspype.sub.reporter import ReportingEventSubscriber
 from eventspype.sub.subscriber import EventSubscriber, OwnedEventSubscriber
 from eventspype.sub.subscription import EventSubscription, PublicationSubscription
 from eventspype.sub.tracker import TrackingEventSubscriber
+from eventspype.viz.visualizer import EventVisualizer
 
 __all__ = [
     # Core Event Types
@@ -31,4 +32,6 @@ __all__ = [
     # Subscriptions
     "EventSubscription",
     "PublicationSubscription",
+    # Visualization
+    "EventVisualizer",
 ]
