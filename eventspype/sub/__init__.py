@@ -1,0 +1,3 @@
+"""
+Subscriber module for eventspype.
+"""

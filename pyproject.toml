@@ -7,14 +7,12 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.13"
+async-timeout = "^4.0.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
 pytest-cov = "^4.1.0"
 pytest-asyncio = "^0.21.1"
-black = "^23.11.0"
-isort = "^5.12.0"
-safety = "^2.3.5"
 ruff = "^0.8.4"
 pre-commit = "^4.0.1"
 mypy = "^1.14.1"
@@ -22,16 +20,6 @@ mypy = "^1.14.1"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.black]
-line-length = 88
-target-version = ['py312']
-include = '\.pyi?$'
-
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
 
 [tool.mypy]
 python_version = "3.13"
@@ -47,7 +35,7 @@ exclude = ["tests/.*"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [

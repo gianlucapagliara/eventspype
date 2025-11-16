@@ -31,7 +31,7 @@ def reporter() -> ReportingEventSubscriber:
 
 
 @pytest.fixture
-def mock_logger() -> Generator[MagicMock, None, None]:
+def mock_logger() -> Generator[MagicMock]:
     # Reset the class-level logger before each test
     ReportingEventSubscriber._logger = None
     with patch("logging.getLogger") as mock_get_logger:
