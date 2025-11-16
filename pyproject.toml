@@ -8,6 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.13"
 async-timeout = "^4.0.3"
+graphviz = "^0.20.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
