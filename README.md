@@ -189,6 +189,24 @@ async def wait_for_user_creation():
 asyncio.run(wait_for_user_creation())
 ```
 
+### Architecture Visualization
+
+Generate graphviz diagrams of your event system architecture:
+
+```python
+from eventspype import EventVisualizer
+
+# Create visualizer and add your classes
+visualizer = EventVisualizer()
+visualizer.add_publisher(NotificationService)
+visualizer.add_subscriber(UserEventHandler)
+
+# Generate diagram (requires: brew install graphviz)
+visualizer.render("architecture", graph_format="png")
+```
+
+The visualizer creates diagrams showing publishers (blue boxes), subscribers (purple boxes), and their connections (green arrows), making it easy to understand and document your event-driven architecture. See `examples/visualization_example.py` for more details.
+
 ## Advanced Features
 
 ### Weak References
