@@ -98,9 +98,23 @@ class EventSubscription:
         for event_tag in tags:
             self._unsubscribe(publisher, subscriber, event_tag)
 
-    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[EventTag]:
+    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[Enum | int]:
+        import hashlib
+
         tags = event_tag if isinstance(event_tag, list) else [event_tag]
-        return [tag if isinstance(tag, Enum | int) else hash(self) for tag in tags]
+        result: list[Enum | int] = []
+        for tag in tags:
+            if isinstance(tag, Enum | int):
+                result.append(tag)
+            elif isinstance(tag, str):
+                # Use deterministic hash to ensure consistency across Python processes
+                result.append(
+                    int(hashlib.md5(tag.upper().encode("utf-8")).hexdigest()[:8], 16)
+                )
+            else:
+                # Fallback for unknown types
+                result.append(hash(self))
+        return result
 
     def _subscribe(
         self,

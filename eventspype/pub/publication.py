@@ -1,3 +1,4 @@
+import hashlib
 from enum import Enum
 from typing import Any
 
@@ -12,7 +13,10 @@ class EventPublication:
         if isinstance(event_tag, Enum):
             event_tag = event_tag.value
         if isinstance(event_tag, str):
-            event_tag = hash(event_tag.upper()) % 10**8
+            # Use deterministic hash to ensure consistency across Python processes
+            event_tag = int(
+                hashlib.md5(event_tag.upper().encode("utf-8")).hexdigest()[:8], 16
+            )
         if not isinstance(event_tag, int):
             raise ValueError(f"Invalid event tag: {event_tag}")
         self.event_tag: int = event_tag
