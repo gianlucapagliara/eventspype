@@ -1,5 +1,4 @@
 import logging
-import random
 import weakref
 from typing import Any
 
@@ -9,14 +8,13 @@ from eventspype.sub.subscriber import EventSubscriber
 
 class EventPublisher:
     """
-    EventPublisher with weak references for a single event type. This avoids the lapsed subscriber problem by periodically
-    performing GC on dead event subscribers.
+    EventPublisher with weak references for a single event type. This avoids the lapsed
+    subscriber problem by using weakref finalizer callbacks for automatic cleanup.
 
-    Dead subscriber cleanup is done by calling _remove_dead_subscribers(), which checks whether the subscriber weak references are
-    alive or not, and removes the dead ones. Each call to _remove_dead_subscribers() takes O(n).
+    When a subscriber is garbage collected, its weakref callback automatically removes the
+    reference from the subscriber set, making cleanup O(1) amortized instead of O(n) per
+    publish call.
     """
-
-    ADD_SUBSCRIBER_GC_PROBABILITY = 0.005
 
     def __init__(self, publication: EventPublication) -> None:
         self._publication = publication
@@ -35,13 +33,12 @@ class EventPublisher:
 
     def add_subscriber(self, subscriber: EventSubscriber) -> None:
         """Add a subscriber for this publisher's event."""
-        # Create weak reference to the subscriber
-        subscriber_ref = weakref.ref(subscriber)
+        # Create weak reference with a finalizer callback for automatic cleanup
+        subscribers = self._subscribers
+        subscriber_ref = weakref.ref(
+            subscriber, lambda ref: subscribers.discard(ref)
+        )
         self._subscribers.add(subscriber_ref)
-
-        # Randomly perform garbage collection
-        if random.random() < self.ADD_SUBSCRIBER_GC_PROBABILITY:
-            self._remove_dead_subscribers()
 
     def remove_subscriber(self, subscriber: EventSubscriber) -> None:
         """Remove a subscriber."""
@@ -51,13 +48,8 @@ class EventPublisher:
         # Remove the subscriber if it exists
         self._subscribers.discard(subscriber_ref)
 
-        # Clean up dead subscribers
-        self._remove_dead_subscribers()
-
     def get_subscribers(self) -> list[EventSubscriber]:
         """Get all active subscribers."""
-        self._remove_dead_subscribers()
-
         # Return only the subscribers that are still alive
         return [
             subscriber
@@ -73,12 +65,9 @@ class EventPublisher:
                 f"Invalid event type: expected {self._publication.event_class}, got {type(event)}"
             )
 
-        self._remove_dead_subscribers()
-
-        # Make a copy of the subscribers to avoid modification during iteration
-        subscribers = self._subscribers.copy()
-
-        for subscriber_ref in subscribers:
+        # Use a tuple snapshot for iteration — cheaper than set.copy() since we
+        # only need iteration, not set operations
+        for subscriber_ref in tuple(self._subscribers):
             subscriber = subscriber_ref()
             if subscriber is None:
                 continue
@@ -87,11 +76,6 @@ class EventPublisher:
                 subscriber(event, self._publication.event_tag, caller or self)
             except Exception:
                 self._log_exception(event)
-
-    def _remove_dead_subscribers(self) -> None:
-        """Remove any dead subscribers."""
-        # Remove any dead references
-        self._subscribers = {ref for ref in self._subscribers if ref() is not None}
 
     def _log_exception(self, arg: Any) -> None:
         """Log any exceptions that occur during event processing."""

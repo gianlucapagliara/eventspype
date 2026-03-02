@@ -1,3 +1,4 @@
+from functools import cache
 from typing import Any
 
 from eventspype.event import EventTag
@@ -22,6 +23,7 @@ class MultiPublisher:
     # === Class Methods ===
 
     @classmethod
+    @cache
     def get_event_definitions(cls) -> dict[str, EventPublication]:
         """Get all event publications defined in the class and its parent classes."""
         result: dict[str, EventPublication] = {}
@@ -36,11 +38,17 @@ class MultiPublisher:
         return result
 
     @classmethod
+    @cache
+    def _valid_publications(cls) -> frozenset[EventPublication]:
+        """Get the set of valid publications for O(1) membership testing."""
+        return frozenset(cls.get_event_definitions().values())
+
+    @classmethod
     def is_publication_valid(
         cls, publication: EventPublication, raise_error: bool = True
     ) -> bool:
         """Check if a publication is valid."""
-        if publication not in cls.get_event_definitions().values():
+        if publication not in cls._valid_publications():
             if raise_error:
                 raise ValueError(f"Invalid publication: {publication}")
             return False

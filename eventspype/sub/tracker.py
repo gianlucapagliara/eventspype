@@ -1,5 +1,6 @@
 import asyncio
 from collections import deque
+from collections.abc import MutableSet
 from typing import Any
 
 from async_timeout import timeout
@@ -24,7 +25,7 @@ class TrackingEventSubscriber(EventSubscriber):
         self._event_source = event_source
         self._generic_collected_events: deque[Any] = deque(maxlen=max_len)
         self._collected_events: dict[type[Any], deque[Any]] = {}
-        self._waiting: dict[asyncio.Event, type[Any]] = {}
+        self._waiting_by_type: dict[type[Any], MutableSet[asyncio.Event]] = {}
         self._wait_returns: dict[asyncio.Event, Any] = {}
 
     @property
@@ -59,7 +60,9 @@ class TrackingEventSubscriber(EventSubscriber):
             TimeoutError: If the event doesn't occur within timeout_seconds
         """
         notifier = asyncio.Event()
-        self._waiting[notifier] = event_type
+        if event_type not in self._waiting_by_type:
+            self._waiting_by_type[event_type] = set()
+        self._waiting_by_type[event_type].add(notifier)
 
         try:
             async with timeout(timeout_seconds):
@@ -71,8 +74,11 @@ class TrackingEventSubscriber(EventSubscriber):
             return retval
         finally:
             # Always clean up, even on timeout
-            if notifier in self._waiting:
-                del self._waiting[notifier]
+            waiters = self._waiting_by_type.get(event_type)
+            if waiters is not None:
+                waiters.discard(notifier)
+                if not waiters:
+                    del self._waiting_by_type[event_type]
             if notifier in self._wait_returns:
                 del self._wait_returns[notifier]
 
@@ -99,13 +105,9 @@ class TrackingEventSubscriber(EventSubscriber):
         # Log the event
         event_deque.append(event_object)
 
-        # Notify any waiters for this event type
-        should_notify = []
-        for notifier, waiting_event_type in self._waiting.items():
-            if event_type is waiting_event_type:
-                should_notify.append(notifier)
+        # Notify waiters for this event type — O(1) lookup by type
+        waiters = self._waiting_by_type.get(event_type)
+        if waiters:
+            for notifier in waiters:
                 self._wait_returns[notifier] = event_object
-
-        # Set the events after collecting them all
-        for notifier in should_notify:
-            notifier.set()
+                notifier.set()
