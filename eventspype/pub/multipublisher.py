@@ -1,5 +1,6 @@
 from typing import Any
 
+from eventspype.broker.broker import MessageBroker
 from eventspype.event import EventTag
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
@@ -11,13 +12,16 @@ class MultiPublisher:
     """
     A publisher that can handle multiple event types through different publications.
     Each publication is handled by its own EventPublisher instance.
+
+    Optionally accepts a MessageBroker to route events through an external system.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, broker: MessageBroker | None = None) -> None:
         # Map of publications to their dedicated publishers
         self._publishers: dict[EventPublication, EventPublisher] = {}
         # Keep references to functional subscribers to prevent garbage collection
         self._functional_subscribers: dict[Any, FunctionalEventSubscriber] = {}
+        self._broker = broker
 
     # === Class Methods ===
 
@@ -57,10 +61,23 @@ class MultiPublisher:
 
     # === Subscriptions ===
 
+    @property
+    def broker(self) -> MessageBroker | None:
+        return self._broker
+
+    @broker.setter
+    def broker(self, broker: MessageBroker | None) -> None:
+        """Set or change the broker for all publishers."""
+        self._broker = broker
+        for publisher in self._publishers.values():
+            publisher.broker = broker
+
     def _get_or_create_publisher(self, publication: EventPublication) -> EventPublisher:
         """Get or create a dedicated publisher for a publication."""
         if publication not in self._publishers:
-            self._publishers[publication] = EventPublisher(publication)
+            self._publishers[publication] = EventPublisher(
+                publication, broker=self._broker
+            )
         return self._publishers[publication]
 
     def add_subscriber(
