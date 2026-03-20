@@ -49,9 +49,7 @@ class RedisBroker(MessageBroker):
     def _prefixed_channel(self, channel: str) -> str:
         return f"{self._channel_prefix}{channel}"
 
-    def publish(
-        self, channel: str, event: Any, event_tag: int, caller: Any
-    ) -> None:
+    def publish(self, channel: str, event: Any, event_tag: int, caller: Any) -> None:
         prefixed = self._prefixed_channel(channel)
         payload = self._serializer.serialize(event)
         message = json.dumps(

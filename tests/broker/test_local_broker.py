@@ -31,17 +31,13 @@ class MockSubscriber(EventSubscriber):
         self.received_messages: list[Any] = []
         self.received_tags: list[int] = []
 
-    def call(
-        self, arg: Any, current_event_tag: int, current_event_caller: Any
-    ) -> None:
+    def call(self, arg: Any, current_event_tag: int, current_event_caller: Any) -> None:
         self.received_messages.append(arg)
         self.received_tags.append(current_event_tag)
 
 
 class ErrorSubscriber(EventSubscriber):
-    def call(
-        self, arg: Any, current_event_tag: int, current_event_caller: Any
-    ) -> None:
+    def call(self, arg: Any, current_event_tag: int, current_event_caller: Any) -> None:
         raise ValueError("Test error")
 
 

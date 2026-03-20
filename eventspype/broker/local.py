@@ -15,9 +15,7 @@ class LocalBroker(MessageBroker):
     """
 
     def __init__(self) -> None:
-        self._subscriptions: dict[str, set[weakref.ReferenceType[EventSubscriber]]] = (
-            {}
-        )
+        self._subscriptions: dict[str, set[weakref.ReferenceType[EventSubscriber]]] = {}
         self._logger: logging.Logger | None = None
 
     @property
@@ -26,9 +24,7 @@ class LocalBroker(MessageBroker):
             self._logger = logging.getLogger(__name__)
         return self._logger
 
-    def publish(
-        self, channel: str, event: Any, event_tag: int, caller: Any
-    ) -> None:
+    def publish(self, channel: str, event: Any, event_tag: int, caller: Any) -> None:
         if channel not in self._subscriptions:
             return
 
