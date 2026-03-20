@@ -1,10 +1,12 @@
 import logging
+import weakref
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 import pytest
 
+from eventspype.broker.broker import MessageBroker
 from eventspype.broker.local import LocalBroker
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
@@ -155,3 +157,93 @@ def test_publisher_broker_property() -> None:
     publisher.publish(Event1(message="via broker"))
     assert len(subscriber.received_messages) == 2
     assert subscriber.received_messages[1] == Event1(message="via broker")
+
+
+def test_message_broker_abstract_publish_raises() -> None:
+    """Test that calling super().publish on MessageBroker raises NotImplementedError (line 26)."""
+
+    class BarePublishBroker(MessageBroker):
+        def publish(
+            self, channel: str, event: Any, event_tag: int, caller: Any
+        ) -> None:
+            super().publish(channel, event, event_tag, caller)  # type: ignore[safe-super]
+
+        def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            pass
+
+        def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            pass
+
+    broker = BarePublishBroker()
+    with pytest.raises(NotImplementedError):
+        broker.publish("ch", None, 1, None)
+
+
+def test_message_broker_abstract_subscribe_raises() -> None:
+    """Test that calling super().subscribe on MessageBroker raises NotImplementedError (line 36)."""
+
+    class BareSubscribeBroker(MessageBroker):
+        def publish(
+            self, channel: str, event: Any, event_tag: int, caller: Any
+        ) -> None:
+            pass
+
+        def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            super().subscribe(channel, subscriber)  # type: ignore[safe-super]
+
+        def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            pass
+
+    broker = BareSubscribeBroker()
+    with pytest.raises(NotImplementedError):
+        broker.subscribe("ch", None)  # type: ignore[arg-type]
+
+
+def test_message_broker_abstract_unsubscribe_raises() -> None:
+    """Test that calling super().unsubscribe on MessageBroker raises NotImplementedError (line 46)."""
+
+    class BareUnsubscribeBroker(MessageBroker):
+        def publish(
+            self, channel: str, event: Any, event_tag: int, caller: Any
+        ) -> None:
+            pass
+
+        def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            pass
+
+        def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+            super().unsubscribe(channel, subscriber)  # type: ignore[safe-super]
+
+    broker = BareUnsubscribeBroker()
+    with pytest.raises(NotImplementedError):
+        broker.unsubscribe("ch", None)  # type: ignore[arg-type]
+
+
+def test_local_broker_dead_subscriber_during_publish(broker: LocalBroker) -> None:
+    """Test that dead subscriber refs are skipped during publish (line 38)."""
+    live_subscriber = MockSubscriber()
+
+    class TempSubscriber(EventSubscriber):
+        def call(
+            self, arg: Any, current_event_tag: int, current_event_caller: Any
+        ) -> None:
+            pass
+
+    temp = TempSubscriber()
+    broker.subscribe("test_channel", live_subscriber)
+    broker.subscribe("test_channel", temp)
+
+    # Kill the temp subscriber
+    del temp
+
+    # Inject a guaranteed dead ref into the subscription set
+    another = TempSubscriber()
+    dead_ref: weakref.ReferenceType[EventSubscriber] = weakref.ref(another)
+    broker._subscriptions["test_channel"].add(dead_ref)
+    del another  # Now dead_ref() returns None
+
+    # Publish should skip dead refs and deliver to live subscriber
+    broker.publish("test_channel", Event1(message="hello"), 1, None)
+
+    assert len(live_subscriber.received_messages) == 1
+    assert live_subscriber.received_messages[0] == Event1(message="hello")

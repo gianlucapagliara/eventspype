@@ -1,6 +1,6 @@
 [project]
 name = "eventspype"
-version = "1.1.1"
+version = "1.1.2"
 description = "A Python framework for building event-driven applications with a clean publisher-subscriber pattern implementation."
 authors = [{ name = "Gianluca Pagliara", email = "pagliara.gianluca@gmail.com" }]
 readme = "README.md"

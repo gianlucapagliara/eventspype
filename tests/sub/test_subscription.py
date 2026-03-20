@@ -1,12 +1,14 @@
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 import pytest
 
+from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.functional import FunctionalEventSubscriber
-from eventspype.sub.subscription import EventSubscription
+from eventspype.sub.subscription import EventSubscription, PublicationSubscription
 
 
 class MockEvents(Enum):
@@ -199,3 +201,166 @@ def test_unsubscribe_publisher_type_mismatch() -> None:
 
     with pytest.raises(ValueError, match="Publisher type mismatch"):
         subscription._unsubscribe(wrong_publisher, subscriber, 1)  # type: ignore
+
+
+def test_event_subscription_invalid_publisher_class() -> None:
+    class NotAPublisher:
+        pass
+
+    with pytest.raises(
+        ValueError,
+        match="Publisher class must be a subclass of EventPublisher or MultiPublisher",
+    ):
+        EventSubscription(NotAPublisher, MockEvents.EVENT_1, lambda arg: arg)  # type: ignore
+
+
+def test_get_event_tags_unknown_type() -> None:
+    subscription = EventSubscription(
+        MockPublisher,
+        MockEvents.EVENT_1,
+        lambda arg: arg,
+        callback_with_subscriber=False,
+    )
+    # Pass an object of unknown type (not Enum, int, or str)
+    result = subscription._get_event_tags([3.14])  # type: ignore
+    assert len(result) == 1
+    assert result[0] == hash(subscription)
+
+
+# === MultiPublisher integration tests ===
+
+
+@dataclass
+class Event1:
+    message: str
+
+
+@dataclass
+class Event2:
+    message: str
+
+
+class MockMultiPublisher(MultiPublisher):
+    event1 = EventPublication(MockEvents.EVENT_1, Event1)
+    event2 = EventPublication(MockEvents.EVENT_2, Event2)
+
+
+class MockMultiSubscriber:
+    def __init__(self) -> None:
+        self.calls: list[Any] = []
+
+    def callback(
+        self, arg: Any, current_event_tag: int, current_event_caller: Any
+    ) -> None:
+        self.calls.append(arg)
+
+
+def test_subscribe_with_multipublisher() -> None:
+    subscriber = MockMultiSubscriber()
+    publisher = MockMultiPublisher()
+
+    subscription = EventSubscription(
+        MockMultiPublisher,
+        MockEvents.EVENT_1,
+        subscriber.callback,  # type: ignore[arg-type]
+        callback_with_subscriber=False,
+    )
+
+    subscribers = subscription.subscribe(publisher, subscriber)
+    assert len(subscribers) == 1
+
+    event = Event1(message="hello")
+    publisher.publish(MockMultiPublisher.event1, event)
+    assert len(subscriber.calls) == 1
+    assert subscriber.calls[0] == event
+
+
+def test_unsubscribe_with_multipublisher() -> None:
+    subscriber = MockMultiSubscriber()
+    publisher = MockMultiPublisher()
+
+    subscription = EventSubscription(
+        MockMultiPublisher,
+        MockEvents.EVENT_1,
+        subscriber.callback,  # type: ignore[arg-type]
+        callback_with_subscriber=False,
+    )
+
+    subs = subscription.subscribe(publisher, subscriber)
+    subscription.unsubscribe(publisher, subs[0])
+
+    publisher.publish(MockMultiPublisher.event1, Event1(message="hello"))
+    assert len(subscriber.calls) == 0
+
+
+def test_subscribe_callback_with_subscriber_has_name() -> None:
+    """Test _subscribe with callback_with_subscriber=True and callback that has __name__."""
+
+    class MySubscriber:
+        def __init__(self) -> None:
+            self.calls: list[Any] = []
+
+        def my_callback(
+            self, arg: Any, current_event_tag: int, current_event_caller: Any
+        ) -> None:
+            self.calls.append(arg)
+
+    subscriber = MySubscriber()
+    publisher = MockPublisher()
+
+    # Use a named function as callback
+    subscription = EventSubscription(
+        MockPublisher,
+        MockEvents.EVENT_1,
+        MySubscriber.my_callback,  # type: ignore[arg-type]
+        callback_with_subscriber=True,
+    )
+
+    subs = subscription.subscribe(publisher, subscriber)
+    assert len(subs) == 1
+
+    publisher.publish("test_message")
+    assert len(subscriber.calls) == 1
+    assert subscriber.calls[0] == "test_message"
+
+
+# === PublicationSubscription tests ===
+
+
+def test_publication_subscription_init() -> None:
+    def callback(arg: Any, tag: int, caller: Any) -> None:
+        pass
+
+    pub = EventPublication(MockEvents.EVENT_1, Event1)
+    subscription = PublicationSubscription(
+        MockMultiPublisher, pub, callback, callback_with_subscriber=False
+    )
+
+    assert subscription.publisher_class == MockMultiPublisher
+    assert subscription._event_publication is pub
+
+
+def test_publication_subscription_invalid_publisher_class() -> None:
+    pub = EventPublication(MockEvents.EVENT_1, Event1)
+
+    with pytest.raises(
+        ValueError, match="Publisher class must be a subclass of MultiPublisher"
+    ):
+        PublicationSubscription(
+            EventPublisher,  # type: ignore[arg-type]
+            pub,
+            lambda arg: arg,
+            callback_with_subscriber=False,
+        )
+
+
+def test_publication_subscription_get_publication() -> None:
+    pub = MockMultiPublisher.event1
+
+    subscription = PublicationSubscription(
+        MockMultiPublisher, pub, lambda arg: arg, callback_with_subscriber=False
+    )
+
+    publisher = MockMultiPublisher()
+    result = subscription._get_publication(publisher, MockEvents.EVENT_1)
+    assert result is pub

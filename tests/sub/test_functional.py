@@ -39,3 +39,22 @@ def test_functional_subscriber_call_operator() -> None:
 
     assert len(calls) == 1
     assert calls[0] == (test_arg, test_tag, test_caller)
+
+
+def test_functional_subscriber_without_event_info() -> None:
+    calls = []
+
+    def callback(arg: str) -> None:
+        calls.append(arg)
+
+    subscriber = FunctionalEventSubscriber(callback, with_event_info=False)
+
+    test_arg = "test_value"
+    test_tag = 42
+    test_caller = object()
+
+    subscriber.call(test_arg, test_tag, test_caller)
+
+    assert len(calls) == 1
+    # Should only receive the arg, not tag/caller
+    assert calls[0] == test_arg

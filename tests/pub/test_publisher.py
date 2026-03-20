@@ -1,4 +1,5 @@
 import logging
+import weakref
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -6,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from eventspype.broker.local import LocalBroker
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.subscriber import EventSubscriber
@@ -175,3 +177,99 @@ def test_gc_on_add_subscriber(
     subscribers = publisher.get_subscribers()
     assert len(subscribers) == 1
     assert subscribers[0] == subscriber
+
+
+def test_broker_property_getter() -> None:
+    """Test that the broker property getter returns the broker (line 50)."""
+    publication = EventPublication(MockEvents.EVENT_1, Event1)
+    broker = LocalBroker()
+    publisher = EventPublisher(publication, broker=broker)
+    assert publisher.broker is broker
+
+    publisher_no_broker = EventPublisher(publication)
+    assert publisher_no_broker.broker is None
+
+
+def test_broker_setter_migrates_from_old_broker() -> None:
+    """Test broker setter with old_broker not None migrates subscribers (line 63)."""
+    publication = EventPublication(MockEvents.EVENT_1, Event1)
+    old_broker = LocalBroker()
+    new_broker = LocalBroker()
+    publisher = EventPublisher(publication, broker=old_broker)
+    subscriber = MockSubscriber()
+
+    publisher.add_subscriber(subscriber)
+
+    # Verify subscriber works via old broker
+    publisher.publish(Event1(message="via old"))
+    assert len(subscriber.received_messages) == 1
+
+    # Switch broker - should migrate subscribers from old to new
+    publisher.broker = new_broker
+
+    # Verify subscriber works via new broker
+    publisher.publish(Event1(message="via new"))
+    assert len(subscriber.received_messages) == 2
+    assert subscriber.received_messages[1] == Event1(message="via new")
+
+    # Verify old broker no longer dispatches to subscriber
+    old_broker.publish(
+        str(MockEvents.EVENT_1.value),
+        Event1(message="stale"),
+        MockEvents.EVENT_1.value,
+        publisher,
+    )
+    assert len(subscriber.received_messages) == 2  # no new messages
+
+
+def test_remove_subscriber_with_broker() -> None:
+    """Test remove_subscriber calls broker.unsubscribe when broker is set (line 91)."""
+    publication = EventPublication(MockEvents.EVENT_1, Event1)
+    broker = LocalBroker()
+    publisher = EventPublisher(publication, broker=broker)
+    subscriber = MockSubscriber()
+
+    publisher.add_subscriber(subscriber)
+    publisher.publish(Event1(message="before remove"))
+    assert len(subscriber.received_messages) == 1
+
+    publisher.remove_subscriber(subscriber)
+
+    # After removal, publishing should not reach the subscriber
+    publisher.publish(Event1(message="after remove"))
+    assert len(subscriber.received_messages) == 1  # still 1
+
+
+def test_dispatch_local_dead_subscriber_ref() -> None:
+    """Test that dead subscriber refs are skipped during _dispatch_local (line 134)."""
+    publication = EventPublication(MockEvents.EVENT_1, Event1)
+    publisher = EventPublisher(publication)
+
+    # Add a temporary subscriber that will become dead
+    class TempSubscriber(EventSubscriber):
+        def call(
+            self, arg: Any, current_event_tag: int, current_event_caller: EventPublisher
+        ) -> None:
+            pass
+
+    live_subscriber = MockSubscriber()
+    temp = TempSubscriber()
+
+    publisher.add_subscriber(temp)
+    publisher.add_subscriber(live_subscriber)
+
+    # Kill the temp subscriber - its weak ref will return None
+    del temp
+
+    # Manually add a dead ref to ensure it's present during iteration
+    # (GC in _dispatch_local may clean it, but the continue on line 134 should handle it)
+
+    another = TempSubscriber()
+    dead_ref: weakref.ReferenceType[EventSubscriber] = weakref.ref(another)
+    publisher._subscribers.add(dead_ref)
+    del another  # Now dead_ref() returns None
+
+    # Publish should succeed, only live_subscriber receives the event
+    publisher.publish(Event1(message="test"))
+    assert len(live_subscriber.received_messages) == 1
+    assert live_subscriber.received_messages[0] == Event1(message="test")

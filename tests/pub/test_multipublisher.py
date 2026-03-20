@@ -236,3 +236,62 @@ def test_event_definition_inheritance() -> None:
     child = ChildPublisher()
     assert child.is_publication_valid(ChildPublisher.child_event)
     assert child.is_publication_valid(ChildPublisher.base_event)
+
+
+def test_is_publication_valid_raise_error_false_returns_false() -> None:
+    invalid_pub = EventPublication(
+        MockEvents.EVENT_1, Event1
+    )  # Not defined in MockPublisher
+    result = MockPublisher.is_publication_valid(invalid_pub, raise_error=False)
+    assert result is False
+
+
+def test_is_publication_valid_raise_error_false_returns_true() -> None:
+    result = MockPublisher.is_publication_valid(MockPublisher.event1, raise_error=False)
+    assert result is True
+
+
+def test_get_event_definition_by_tag_not_found() -> None:
+    class OtherEvents(Enum):
+        UNKNOWN = 999
+
+    with pytest.raises(ValueError, match="No event definition found for tag"):
+        MockPublisher.get_event_definition_by_tag(OtherEvents.UNKNOWN)
+
+
+def test_broker_setter_propagates_to_publishers(publisher: MockPublisher) -> None:
+    from unittest.mock import MagicMock
+
+    # Add a subscriber so publishers are created
+    subscriber = MockSubscriber()
+    publisher.add_subscriber(MockPublisher.event1, subscriber)
+
+    mock_broker = MagicMock()
+    publisher.broker = mock_broker
+
+    assert publisher.broker is mock_broker
+    # Check that existing publishers got the broker
+    for pub in publisher._publishers.values():
+        assert pub.broker is mock_broker
+
+
+def test_remove_subscriber_no_publisher_yet(publisher: MockPublisher) -> None:
+    # Create a fresh publisher without pre-initialized publishers
+    # Clear any pre-initialized publishers
+    pub = MockPublisher()
+    pub._publishers.clear()
+
+    subscriber = MockSubscriber()
+    # Should return early without error when publication has no publisher
+    pub.remove_subscriber(MockPublisher.event1, subscriber)
+
+
+def test_remove_subscriber_with_callback_no_publisher_yet() -> None:
+    pub = MockPublisher()
+    pub._publishers.clear()
+
+    def callback(arg: Any, tag: int, caller: Any) -> None:
+        pass
+
+    # Should return early without error when publication has no publisher
+    pub.remove_subscriber_with_callback(MockPublisher.event1, callback)

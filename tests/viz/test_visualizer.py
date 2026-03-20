@@ -412,3 +412,55 @@ class TestVisualizerIntegration:
         assert "TestUserPublisher" not in graph2.source
         assert "TestOrderPublisher" not in graph1.source
         assert "TestOrderPublisher" in graph2.source
+
+
+class TestVisualizerEdgeCases:
+    """Test edge cases for coverage."""
+
+    def test_publisher_with_no_publications(self) -> None:
+        """Test that a publisher with no publications shows 'No publications' (line 138)."""
+
+        class EmptyPublisher(MultiPublisher):
+            pass
+
+        visualizer = EventVisualizer()
+        visualizer.add_publisher(EmptyPublisher)
+        graph = visualizer.generate_graph()
+
+        assert "No publications" in graph.source
+
+    def test_subscriber_with_no_subscriptions(self) -> None:
+        """Test that a subscriber with no subscriptions shows 'No subscriptions' (line 172)."""
+
+        class EmptySubscriber(MultiSubscriber):
+            pass
+
+        visualizer = EventVisualizer()
+        visualizer.add_subscriber(EmptySubscriber)
+        graph = visualizer.generate_graph()
+
+        assert "No subscriptions" in graph.source
+
+    def test_find_matches_with_invalid_tag(self) -> None:
+        """Test that _find_matches skips invalid tags gracefully (lines 242-244)."""
+        visualizer = EventVisualizer()
+        visualizer.add_publisher(TestUserPublisher)
+
+        publications = visualizer._publishers[TestUserPublisher]
+
+        # Create a subscription with an invalid tag (a type that causes ValueError
+        # when passed to EventPublication). We need a tag where EventPublication
+        # raises ValueError - that happens when tag is not Enum, str, or int.
+        invalid_subscription = EventSubscription(
+            TestUserPublisher,
+            [3.14],  # float will cause ValueError in EventPublication
+            lambda self, event: None,
+        )
+
+        subscriptions = {"bad_sub": invalid_subscription}
+
+        # Should not raise, just skip the invalid tag
+        matches = visualizer._find_matches(
+            TestUserPublisher, publications, subscriptions
+        )
+        assert isinstance(matches, list)
