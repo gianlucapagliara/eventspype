@@ -20,4 +20,3 @@ class EventPublication:
         if not isinstance(event_tag, int):
             raise ValueError(f"Invalid event tag: {event_tag}")
         self.event_tag: int = event_tag
-
