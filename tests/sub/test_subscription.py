@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from eventspype.event import EventTag
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
@@ -21,7 +22,7 @@ class MockSubscriber:
         self.calls: list[Any] = []
 
     def callback(
-        self, arg: Any, current_event_tag: int, current_event_caller: EventPublisher
+        self, arg: Any, current_event_tag: EventTag, current_event_caller: Any
     ) -> None:
         self.calls.append(arg)
 
@@ -42,8 +43,8 @@ class WrongPublisher(EventPublisher):
 
 
 def test_event_subscription_init() -> None:
-    def callback() -> None:
-        pass
+    def callback(arg: Any) -> Any:
+        return arg
 
     subscription = EventSubscription(MockPublisher, MockEvents.EVENT_1, callback)
 
@@ -54,8 +55,8 @@ def test_event_subscription_init() -> None:
 
 
 def test_event_subscription_hash() -> None:
-    def callback() -> None:
-        pass
+    def callback(arg: Any) -> Any:
+        return arg
 
     subscription1 = EventSubscription(MockPublisher, MockEvents.EVENT_1, callback)
     subscription2 = EventSubscription(MockPublisher, MockEvents.EVENT_1, callback)
@@ -89,7 +90,7 @@ def test_event_subscription_subscribe_multiple_events(
 ) -> None:
     subscriber = MockSubscriber()
     publisher = MockPublisher(mock_publication)
-    events = [MockEvents.EVENT_1, MockEvents.EVENT_2]
+    events: list[EventTag] = [MockEvents.EVENT_1, MockEvents.EVENT_2]
     subscription = EventSubscription(
         MockPublisher, events, subscriber.callback, callback_with_subscriber=False
     )
@@ -147,7 +148,7 @@ def test_event_subscription_without_subscriber(
 ) -> None:
     publisher = MockPublisher(mock_publication)
 
-    def callback(arg: Any, event_tag: int, caller: EventPublisher) -> None:
+    def callback(arg: Any, event_tag: EventTag, caller: Any) -> None:
         pass
 
     subscription = EventSubscription(
@@ -162,9 +163,7 @@ def test_event_subscription_missing_subscriber(
 ) -> None:
     publisher = MockPublisher(mock_publication)
 
-    def callback(
-        subscriber: Any, arg: Any, event_tag: int, caller: EventPublisher
-    ) -> None:
+    def callback(subscriber: Any, arg: Any, event_tag: EventTag, caller: Any) -> None:
         pass
 
     subscription = EventSubscription(MockPublisher, MockEvents.EVENT_1, callback)
@@ -175,18 +174,18 @@ def test_event_subscription_missing_subscriber(
 
 
 def test_event_tag_str_single() -> None:
-    def callback() -> None:
-        pass
+    def callback(arg: Any) -> Any:
+        return arg
 
     subscription = EventSubscription(MockPublisher, MockEvents.EVENT_1, callback)
     assert subscription.event_tag_str == str(MockEvents.EVENT_1)
 
 
 def test_event_tag_str_multiple() -> None:
-    def callback() -> None:
-        pass
+    def callback(arg: Any) -> Any:
+        return arg
 
-    events = [MockEvents.EVENT_1, MockEvents.EVENT_2]
+    events: list[EventTag] = [MockEvents.EVENT_1, MockEvents.EVENT_2]
     subscription = EventSubscription(MockPublisher, events, callback)
     assert subscription.event_tag_str == f"[{MockEvents.EVENT_1}, {MockEvents.EVENT_2}]"
 
@@ -250,8 +249,8 @@ class MockMultiSubscriber:
         self.calls: list[Any] = []
 
     def callback(
-        self, arg: Any, current_event_tag: int, current_event_caller: Any
-    ) -> None:
+        self, arg: Any, current_event_tag: EventTag, current_event_caller: Any
+    ) -> Any:
         self.calls.append(arg)
 
 
@@ -262,7 +261,7 @@ def test_subscribe_with_multipublisher() -> None:
     subscription = EventSubscription(
         MockMultiPublisher,
         MockEvents.EVENT_1,
-        subscriber.callback,  # type: ignore[arg-type]
+        subscriber.callback,
         callback_with_subscriber=False,
     )
 
@@ -282,7 +281,7 @@ def test_unsubscribe_with_multipublisher() -> None:
     subscription = EventSubscription(
         MockMultiPublisher,
         MockEvents.EVENT_1,
-        subscriber.callback,  # type: ignore[arg-type]
+        subscriber.callback,
         callback_with_subscriber=False,
     )
 
@@ -301,8 +300,8 @@ def test_subscribe_callback_with_subscriber_has_name() -> None:
             self.calls: list[Any] = []
 
         def my_callback(
-            self, arg: Any, current_event_tag: int, current_event_caller: Any
-        ) -> None:
+            self, arg: Any, current_event_tag: EventTag, current_event_caller: Any
+        ) -> Any:
             self.calls.append(arg)
 
     subscriber = MySubscriber()
@@ -312,7 +311,7 @@ def test_subscribe_callback_with_subscriber_has_name() -> None:
     subscription = EventSubscription(
         MockPublisher,
         MockEvents.EVENT_1,
-        MySubscriber.my_callback,  # type: ignore[arg-type]
+        MySubscriber.my_callback,
         callback_with_subscriber=True,
     )
 
@@ -328,7 +327,7 @@ def test_subscribe_callback_with_subscriber_has_name() -> None:
 
 
 def test_publication_subscription_init() -> None:
-    def callback(arg: Any, tag: int, caller: Any) -> None:
+    def callback(arg: Any, tag: EventTag, caller: Any) -> Any:
         pass
 
     pub = EventPublication(MockEvents.EVENT_1, Event1)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -21,11 +21,11 @@ class DictProtocolEvent:
     def __init__(self, value: int) -> None:
         self.value = value
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {"value": self.value}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "DictProtocolEvent":
+    def from_dict(cls, data: dict[str, Any]) -> "DictProtocolEvent":
         return cls(**data)
 
 

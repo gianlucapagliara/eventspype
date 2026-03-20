@@ -1,11 +1,14 @@
+from typing import Any
+
+from eventspype.event import EventTag
 from eventspype.sub.functional import FunctionalEventSubscriber
 
 
 def test_functional_subscriber_callback() -> None:
     # Track calls to the callback
-    calls = []
+    calls: list[Any] = []
 
-    def callback(arg: str, event_tag: int, caller: object) -> None:
+    def callback(arg: Any, event_tag: EventTag, caller: Any) -> Any:
         calls.append((arg, event_tag, caller))
 
     subscriber = FunctionalEventSubscriber(callback)
@@ -23,9 +26,9 @@ def test_functional_subscriber_callback() -> None:
 
 def test_functional_subscriber_call_operator() -> None:
     # Track calls to the callback
-    calls = []
+    calls: list[Any] = []
 
-    def callback(arg: str, event_tag: int, caller: object) -> None:
+    def callback(arg: Any, event_tag: EventTag, caller: Any) -> Any:
         calls.append((arg, event_tag, caller))
 
     subscriber = FunctionalEventSubscriber(callback)

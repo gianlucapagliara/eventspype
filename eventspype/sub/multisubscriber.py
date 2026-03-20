@@ -1,5 +1,4 @@
 import logging
-from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable
 from functools import wraps
@@ -71,7 +70,6 @@ class MultiSubscriber:
 
     # === Decorators ===
 
-    @abstractmethod
     def logger(self) -> logging.Logger:
         raise NotImplementedError
 

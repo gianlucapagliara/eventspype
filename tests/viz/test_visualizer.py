@@ -1,3 +1,4 @@
+import pathlib
 from dataclasses import dataclass
 from enum import Enum
 
@@ -337,7 +338,7 @@ class TestVisualizerGraphGeneration:
 class TestVisualizerRender:
     """Test rendering functionality."""
 
-    def test_render_creates_graph(self, tmp_path) -> None:
+    def test_render_creates_graph(self, tmp_path: pathlib.Path) -> None:
         """Test that render creates a graph file."""
         visualizer = EventVisualizer()
         visualizer.add_publisher(TestUserPublisher)
@@ -350,7 +351,7 @@ class TestVisualizerRender:
         assert result is not None
         assert isinstance(result, str)
 
-    def test_render_with_custom_format(self, tmp_path) -> None:
+    def test_render_with_custom_format(self, tmp_path: pathlib.Path) -> None:
         """Test rendering with a custom format."""
         visualizer = EventVisualizer()
         visualizer.add_publisher(TestUserPublisher)
@@ -365,7 +366,7 @@ class TestVisualizerRender:
 class TestVisualizerIntegration:
     """Integration tests for the visualizer."""
 
-    def test_full_workflow(self, tmp_path) -> None:
+    def test_full_workflow(self, tmp_path: pathlib.Path) -> None:
         """Test the full workflow from adding classes to rendering."""
         visualizer = EventVisualizer()
 
@@ -390,7 +391,7 @@ class TestVisualizerIntegration:
         assert len(visualizer._publishers) == 0
         assert len(visualizer._subscribers) == 0
 
-    def test_reusable_visualizer(self, tmp_path) -> None:
+    def test_reusable_visualizer(self, tmp_path: pathlib.Path) -> None:
         """Test that a visualizer can be reused for multiple graphs."""
         visualizer = EventVisualizer()
 
@@ -453,7 +454,7 @@ class TestVisualizerEdgeCases:
         # raises ValueError - that happens when tag is not Enum, str, or int.
         invalid_subscription = EventSubscription(
             TestUserPublisher,
-            [3.14],  # float will cause ValueError in EventPublication
+            [3.14],  # type: ignore[list-item]  # float will cause ValueError in EventPublication
             lambda self, event: None,
         )
 
