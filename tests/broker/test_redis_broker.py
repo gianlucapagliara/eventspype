@@ -75,7 +75,9 @@ def test_init_defaults(mock_redis: MagicMock) -> None:
 
 def test_init_custom_serializer_and_prefix(mock_redis: MagicMock) -> None:
     custom_serializer = MagicMock()
-    broker = RedisBroker(mock_redis, serializer=custom_serializer, channel_prefix="custom:")
+    broker = RedisBroker(
+        mock_redis, serializer=custom_serializer, channel_prefix="custom:"
+    )
     assert broker._serializer is custom_serializer
     assert broker._channel_prefix == "custom:"
 
@@ -111,7 +113,9 @@ def test_prefixed_channel_custom_prefix(mock_redis: MagicMock) -> None:
 # --- publish tests ---
 
 
-def test_publish_serializes_and_sends(broker: RedisBroker, mock_redis: MagicMock) -> None:
+def test_publish_serializes_and_sends(
+    broker: RedisBroker, mock_redis: MagicMock
+) -> None:
     event = SampleEvent(message="hello")
     broker.publish("chan", event, 42, None)
 
@@ -192,7 +196,9 @@ def test_subscribe_starts_listener(
 # --- unsubscribe tests ---
 
 
-def test_unsubscribe_nonexistent_channel(broker: RedisBroker, subscriber: MockSubscriber) -> None:
+def test_unsubscribe_nonexistent_channel(
+    broker: RedisBroker, subscriber: MockSubscriber
+) -> None:
     # Should not raise
     broker.unsubscribe("nonexistent", subscriber)
 
@@ -343,12 +349,14 @@ def test_handler_dispatches_event_to_subscribers(
 
     message = {
         "type": "message",
-        "data": json.dumps({
-            "event_tag": 7,
-            "event_class": "SampleEvent",
-            "event_module": __name__,
-            "payload": payload,
-        }),
+        "data": json.dumps(
+            {
+                "event_tag": 7,
+                "event_class": "SampleEvent",
+                "event_module": __name__,
+                "payload": payload,
+            }
+        ),
     }
     handler(message)
 
@@ -369,12 +377,14 @@ def test_handler_dispatches_to_multiple_subscribers(broker: RedisBroker) -> None
 
     message = {
         "type": "message",
-        "data": json.dumps({
-            "event_tag": 1,
-            "event_class": "SampleEvent",
-            "event_module": __name__,
-            "payload": payload,
-        }),
+        "data": json.dumps(
+            {
+                "event_tag": 1,
+                "event_class": "SampleEvent",
+                "event_module": __name__,
+                "payload": payload,
+            }
+        ),
     }
     handler(message)
 
@@ -393,18 +403,22 @@ def test_handler_catches_subscriber_error(broker: RedisBroker, caplog: Any) -> N
 
     message = {
         "type": "message",
-        "data": json.dumps({
-            "event_tag": 1,
-            "event_class": "SampleEvent",
-            "event_module": __name__,
-            "payload": payload,
-        }),
+        "data": json.dumps(
+            {
+                "event_tag": 1,
+                "event_class": "SampleEvent",
+                "event_module": __name__,
+                "payload": payload,
+            }
+        ),
     }
 
     with caplog.at_level(logging.ERROR):
         handler(message)
 
-    assert any("Error dispatching event on channel chan1" in r.message for r in caplog.records)
+    assert any(
+        "Error dispatching event on channel chan1" in r.message for r in caplog.records
+    )
 
 
 def test_handler_continues_after_subscriber_error(broker: RedisBroker) -> None:
@@ -420,19 +434,23 @@ def test_handler_continues_after_subscriber_error(broker: RedisBroker) -> None:
 
     message = {
         "type": "message",
-        "data": json.dumps({
-            "event_tag": 1,
-            "event_class": "SampleEvent",
-            "event_module": __name__,
-            "payload": payload,
-        }),
+        "data": json.dumps(
+            {
+                "event_tag": 1,
+                "event_class": "SampleEvent",
+                "event_module": __name__,
+                "payload": payload,
+            }
+        ),
     }
     handler(message)
 
     assert len(good_sub.received_messages) == 1
 
 
-def test_handler_catches_deserialization_error(broker: RedisBroker, caplog: Any) -> None:
+def test_handler_catches_deserialization_error(
+    broker: RedisBroker, caplog: Any
+) -> None:
     handler = broker._make_handler("chan1")
 
     message = {
@@ -443,7 +461,10 @@ def test_handler_catches_deserialization_error(broker: RedisBroker, caplog: Any)
     with caplog.at_level(logging.ERROR):
         handler(message)
 
-    assert any("Error processing Redis message on channel chan1" in r.message for r in caplog.records)
+    assert any(
+        "Error processing Redis message on channel chan1" in r.message
+        for r in caplog.records
+    )
 
 
 def test_handler_catches_bad_module_error(broker: RedisBroker, caplog: Any) -> None:
@@ -451,18 +472,23 @@ def test_handler_catches_bad_module_error(broker: RedisBroker, caplog: Any) -> N
 
     message = {
         "type": "message",
-        "data": json.dumps({
-            "event_tag": 1,
-            "event_class": "NonExistentClass",
-            "event_module": "nonexistent.module.that.does.not.exist",
-            "payload": "{}",
-        }),
+        "data": json.dumps(
+            {
+                "event_tag": 1,
+                "event_class": "NonExistentClass",
+                "event_module": "nonexistent.module.that.does.not.exist",
+                "payload": "{}",
+            }
+        ),
     }
 
     with caplog.at_level(logging.ERROR):
         handler(message)
 
-    assert any("Error processing Redis message on channel chan1" in r.message for r in caplog.records)
+    assert any(
+        "Error processing Redis message on channel chan1" in r.message
+        for r in caplog.records
+    )
 
 
 # --- _resolve_class tests ---
@@ -481,6 +507,7 @@ def test_resolve_class_builtin(broker: RedisBroker) -> None:
 def test_resolve_class_nested(broker: RedisBroker) -> None:
     cls = broker._resolve_class("json", "JSONEncoder")
     import json as json_mod
+
     assert cls is json_mod.JSONEncoder
 
 
