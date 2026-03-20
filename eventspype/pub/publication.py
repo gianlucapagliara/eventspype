@@ -21,5 +21,3 @@ class EventPublication:
             raise ValueError(f"Invalid event tag: {event_tag}")
         self.event_tag: int = event_tag
 
-    def __hash__(self) -> int:
-        return hash(self.event_tag)
