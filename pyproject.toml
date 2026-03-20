@@ -20,6 +20,15 @@ dev = [
     "ruff>=0.8.4",
     "pre-commit>=4.0",
 ]
+docs = [
+    "mkdocs>=1.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/gianlucapagliara/eventspype"
+Documentation = "https://gianlucapagliara.github.io/eventspype/"
+Repository = "https://github.com/gianlucapagliara/eventspype"
+Issues = "https://github.com/gianlucapagliara/eventspype/issues"
 
 [build-system]
 requires = ["hatchling"]

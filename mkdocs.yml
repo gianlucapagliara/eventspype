@@ -1,0 +1,57 @@
+site_name: EventsPype
+site_url: https://gianlucapagliara.github.io/eventspype/
+site_description: A lightweight, type-safe Python framework for building event-driven applications
+site_author: Gianluca Pagliara
+repo_url: https://github.com/gianlucapagliara/eventspype
+repo_name: gianlucapagliara/eventspype
+
+theme:
+  name: readthedocs
+  highlightjs: true
+  hljs_languages:
+    - python
+    - bash
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - codehilite:
+      guess_lang: false
+  - def_list
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - User Guide:
+      - Events: guide/events.md
+      - Publishers: guide/publishers.md
+      - Subscribers: guide/subscribers.md
+      - Message Brokers: guide/broker.md
+      - Tracking & Reporting: guide/tracking.md
+      - Visualization: guide/visualization.md
+  - API Reference:
+      - Events:
+          - Event: api/event.md
+      - Publishers:
+          - EventPublication: api/publication.md
+          - EventPublisher: api/publisher.md
+          - MultiPublisher: api/multipublisher.md
+      - Subscribers:
+          - EventSubscriber: api/subscriber.md
+          - MultiSubscriber: api/multisubscriber.md
+          - EventSubscription: api/subscription.md
+          - TrackingEventSubscriber: api/tracker.md
+          - ReportingEventSubscriber: api/reporter.md
+      - Brokers:
+          - MessageBroker / LocalBroker / RedisBroker: api/broker.md
+      - Visualization:
+          - EventVisualizer: api/visualizer.md
+  - Development:
+      - Contributing: development/contributing.md
