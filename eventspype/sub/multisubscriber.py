@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from collections.abc import Callable
-from functools import wraps
+from functools import cache, wraps
 from typing import Any, TypeVar
 
 from eventspype.pub.publisher import EventPublisher
@@ -19,6 +19,7 @@ class MultiSubscriber:
     # === Class Methods ===
 
     @classmethod
+    @cache
     def get_event_definitions(cls) -> dict[str, EventSubscription]:
         """Get all event subscriptions defined in the class and its parent classes."""
         result: dict[str, EventSubscription] = {}

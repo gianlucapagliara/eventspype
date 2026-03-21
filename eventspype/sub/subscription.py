@@ -3,7 +3,7 @@ from enum import Enum
 from functools import partial
 from typing import Any, TypeVar
 
-from eventspype.event import EventTag
+from eventspype.event import EventTag, normalize_event_tag
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
@@ -99,21 +99,13 @@ class EventSubscription:
             self._unsubscribe(publisher, subscriber, event_tag)
 
     def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[Enum | int]:
-        import hashlib
-
         tags = event_tag if isinstance(event_tag, list) else [event_tag]
         result: list[Enum | int] = []
         for tag in tags:
             if isinstance(tag, Enum | int):
                 result.append(tag)
-            elif isinstance(tag, str):
-                # Use deterministic hash to ensure consistency across Python processes
-                result.append(
-                    int(hashlib.md5(tag.upper().encode("utf-8")).hexdigest()[:8], 16)
-                )
             else:
-                # Fallback for unknown types
-                result.append(hash(self))
+                result.append(normalize_event_tag(tag))
         return result
 
     def _subscribe(

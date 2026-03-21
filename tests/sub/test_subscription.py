@@ -220,10 +220,9 @@ def test_get_event_tags_unknown_type() -> None:
         lambda arg: arg,
         callback_with_subscriber=False,
     )
-    # Pass an object of unknown type (not Enum, int, or str)
-    result = subscription._get_event_tags([3.14])  # type: ignore
-    assert len(result) == 1
-    assert result[0] == hash(subscription)
+    # Pass an object of unknown type (not Enum, int, or str) — should raise ValueError
+    with pytest.raises(ValueError, match="Invalid event tag"):
+        subscription._get_event_tags([3.14])  # type: ignore
 
 
 # === MultiPublisher integration tests ===

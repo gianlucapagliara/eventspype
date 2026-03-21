@@ -145,5 +145,5 @@ async def test_wait_cleanup(logger: TrackingEventSubscriber) -> None:
         await wait_task
 
     # Check that internal state was cleaned up
-    assert not logger._waiting
+    assert not logger._waiting_by_type
     assert not logger._wait_returns
