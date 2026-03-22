@@ -8,6 +8,3 @@ class EventPublication:
         self.original_tag = event_tag
         self.event_class = event_class
         self.event_tag: int = normalize_event_tag(event_tag)
-
-    def __hash__(self) -> int:
-        return hash(self.event_tag)
