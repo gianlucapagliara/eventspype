@@ -4,13 +4,18 @@ eventspype - A lightweight and type-safe Python framework for building event-dri
 
 from eventspype.broker.broker import MessageBroker
 from eventspype.broker.local import LocalBroker
-from eventspype.broker.serializer import EventSerializer, JsonEventSerializer
+from eventspype.broker.serializer import (
+    EventSerializer,
+    JsonEventSerializer,
+    make_json_safe,
+)
 from eventspype.event import Event, EventTag
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.functional import FunctionalEventSubscriber
 from eventspype.sub.multisubscriber import MultiSubscriber
+from eventspype.sub.queue import QueueEventSubscriber
 from eventspype.sub.reporter import ReportingEventSubscriber
 from eventspype.sub.subscriber import EventSubscriber, OwnedEventSubscriber
 from eventspype.sub.subscription import EventSubscription, PublicationSubscription
@@ -26,6 +31,7 @@ __all__ = [
     "LocalBroker",
     "EventSerializer",
     "JsonEventSerializer",
+    "make_json_safe",
     # Publishers
     "EventPublisher",
     "MultiPublisher",
@@ -34,6 +40,7 @@ __all__ = [
     "EventSubscriber",
     "OwnedEventSubscriber",
     "FunctionalEventSubscriber",
+    "QueueEventSubscriber",
     "MultiSubscriber",
     "ReportingEventSubscriber",
     "TrackingEventSubscriber",

@@ -1,6 +1,7 @@
 import dataclasses
 import json
 from abc import abstractmethod
+from enum import Enum
 from typing import Any
 
 
@@ -57,3 +58,20 @@ class JsonEventSerializer(EventSerializer):
         if hasattr(event_class, "from_dict"):
             return event_class.from_dict(data)
         return data
+
+
+def make_json_safe(obj: Any) -> Any:
+    """Recursively convert a value into a JSON-serializable form."""
+    if obj is None or isinstance(obj, bool | int | float | str):
+        return obj
+    if isinstance(obj, Enum):
+        return make_json_safe(obj.value)
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return make_json_safe(dataclasses.asdict(obj))
+    if hasattr(obj, "_asdict"):  # NamedTuple
+        return make_json_safe(obj._asdict())
+    if isinstance(obj, dict):
+        return {str(k): make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list | tuple | set | frozenset):
+        return [make_json_safe(item) for item in obj]
+    return str(obj)
