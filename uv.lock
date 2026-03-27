@@ -121,7 +121,7 @@ wheels = [
 
 [[package]]
 name = "eventspype"
-version = "1.2.1"
+version = "1.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "async-timeout" },
