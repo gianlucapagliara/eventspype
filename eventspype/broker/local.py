@@ -28,11 +28,9 @@ class LocalBroker(MessageBroker):
         if channel not in self._subscriptions:
             return
 
-        # Clean dead refs and copy to avoid modification during iteration
-        self._remove_dead_subscribers(channel)
-        subscribers = self._subscriptions.get(channel, set()).copy()
-
-        for subscriber_ref in subscribers:
+        # Use a tuple snapshot for iteration — cheaper than set.copy()
+        # Dead refs are cleaned automatically by weakref finalizer callbacks
+        for subscriber_ref in tuple(self._subscriptions.get(channel, set())):
             subscriber = subscriber_ref()
             if subscriber is None:
                 continue
@@ -47,17 +45,14 @@ class LocalBroker(MessageBroker):
     def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
         if channel not in self._subscriptions:
             self._subscriptions[channel] = set()
-        self._subscriptions[channel].add(weakref.ref(subscriber))
+        # Use weakref finalizer callback for O(1) amortized cleanup
+        # (same pattern as EventPublisher)
+        subscribers = self._subscriptions[channel]
+        subscriber_ref = weakref.ref(subscriber, lambda ref: subscribers.discard(ref))
+        subscribers.add(subscriber_ref)
 
     def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
         if channel not in self._subscriptions:
             return
         subscriber_ref = weakref.ref(subscriber)
         self._subscriptions[channel].discard(subscriber_ref)
-        self._remove_dead_subscribers(channel)
-
-    def _remove_dead_subscribers(self, channel: str) -> None:
-        if channel in self._subscriptions:
-            self._subscriptions[channel] = {
-                ref for ref in self._subscriptions[channel] if ref() is not None
-            }

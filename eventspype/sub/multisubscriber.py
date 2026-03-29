@@ -33,6 +33,12 @@ class MultiSubscriber:
                     result[name] = value
         return result
 
+    @classmethod
+    @cache
+    def _valid_subscriptions(cls) -> frozenset[EventSubscription]:
+        """Get the set of valid subscriptions for O(1) membership testing."""
+        return frozenset(cls.get_event_definitions().values())
+
     # === Properties ===
 
     @property
@@ -44,7 +50,7 @@ class MultiSubscriber:
     def add_subscription(
         self, subscription: EventSubscription, publisher: EventPublisher
     ) -> None:
-        if subscription not in self.get_event_definitions().values():
+        if subscription not in self._valid_subscriptions():
             raise ValueError("Subscription not defined in event definitions")
 
         if subscription in self._subscribers[publisher]:
@@ -56,7 +62,7 @@ class MultiSubscriber:
     def remove_subscription(
         self, subscription: EventSubscription, publisher: EventPublisher
     ) -> None:
-        if subscription not in self.get_event_definitions().values():
+        if subscription not in self._valid_subscriptions():
             raise ValueError("Subscription not defined in event definitions")
 
         if subscription not in self._subscribers[publisher]:

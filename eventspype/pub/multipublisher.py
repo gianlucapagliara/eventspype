@@ -48,6 +48,21 @@ class MultiPublisher:
         return frozenset(cls.get_event_definitions().values())
 
     @classmethod
+    @cache
+    def _tag_to_publication(cls) -> dict[int, EventPublication]:
+        """Reverse mapping from normalized tag to publication for O(1) lookup."""
+        result: dict[int, EventPublication] = {}
+        for name, pub in cls.get_event_definitions().items():
+            if pub.event_tag in result:
+                existing = result[pub.event_tag]
+                raise ValueError(
+                    f"Duplicate normalized event_tag {pub.event_tag} "
+                    f"for publications '{name}' and '{existing}'"
+                )
+            result[pub.event_tag] = pub
+        return result
+
+    @classmethod
     def is_publication_valid(
         cls, publication: EventPublication, raise_error: bool = True
     ) -> bool:
@@ -62,10 +77,10 @@ class MultiPublisher:
     def get_event_definition_by_tag(cls, event_tag: EventTag) -> EventPublication:
         """Get the event definition by event tag."""
         normalized = normalize_event_tag(event_tag)
-        for value in cls.get_event_definitions().values():
-            if value.event_tag == normalized:
-                return value
-        raise ValueError(f"No event definition found for tag: {event_tag}")
+        publication = cls._tag_to_publication().get(normalized)
+        if publication is None:
+            raise ValueError(f"No event definition found for tag: {event_tag}")
+        return publication
 
     # === Subscriptions ===
 
