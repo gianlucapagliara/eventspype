@@ -1,5 +1,4 @@
-from typing import Any
-
+from eventspype.event import EventTag, format_event_tag, normalize_event_tag
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.sub.multisubscriber import MultiSubscriber
@@ -132,7 +131,7 @@ class EventVisualizer:
         if publications:
             label_parts.append("<b>Publications:</b>")
             for name, pub in publications.items():
-                tag_str = self._format_tag(pub.original_tag)
+                tag_str = format_event_tag(pub.original_tag)
                 label_parts.append(f"• {name}: {tag_str}")
         else:
             label_parts.append("<i>No publications</i>")
@@ -232,11 +231,9 @@ class EventVisualizer:
 
                 # Check if any subscription tag matches the publication tag
                 for sub_tag in sub_tags:
-                    # Create a temporary publication to get the normalized tag
                     try:
-                        temp_pub = EventPublication(sub_tag, Any)
-                        if temp_pub.event_tag == publication.event_tag:
-                            tag_str = self._format_tag(publication.original_tag)
+                        if normalize_event_tag(sub_tag) == publication.event_tag:
+                            tag_str = format_event_tag(publication.original_tag)
                             matches.append((pub_name, sub_name, tag_str))
                             break
                     except ValueError:
@@ -245,16 +242,12 @@ class EventVisualizer:
 
         return matches
 
-    def _format_tag(self, tag: Any) -> str:
-        """Format an event tag for display."""
-        from enum import Enum
+    def _format_tag(self, tag: EventTag) -> str:
+        """Format an event tag for display.
 
-        if isinstance(tag, Enum):
-            return f"{tag.__class__.__name__}.{tag.name}"
-        elif isinstance(tag, str):
-            return f'"{tag}"'
-        else:
-            return str(tag)
+        Delegates to :func:`eventspype.event.format_event_tag`.
+        """
+        return format_event_tag(tag)
 
     def clear(self) -> None:
         """Clear all publishers and subscribers from the visualizer."""

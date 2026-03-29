@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from enum import Enum
 from functools import partial
 from typing import Any, TypeVar
 
@@ -98,15 +97,9 @@ class EventSubscription:
         for event_tag in tags:
             self._unsubscribe(publisher, subscriber, event_tag)
 
-    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[Enum | int]:
+    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[int]:
         tags = event_tag if isinstance(event_tag, list) else [event_tag]
-        result: list[Enum | int] = []
-        for tag in tags:
-            if isinstance(tag, Enum | int):
-                result.append(tag)
-            else:
-                result.append(normalize_event_tag(tag))
-        return result
+        return [normalize_event_tag(tag) for tag in tags]
 
     def _subscribe(
         self,

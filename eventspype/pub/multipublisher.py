@@ -2,7 +2,7 @@ from functools import cache
 from typing import Any
 
 from eventspype.broker.broker import MessageBroker
-from eventspype.event import EventTag
+from eventspype.event import EventTag, normalize_event_tag
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.functional import FunctionalEventSubscriber
@@ -61,9 +61,9 @@ class MultiPublisher:
     @classmethod
     def get_event_definition_by_tag(cls, event_tag: EventTag) -> EventPublication:
         """Get the event definition by event tag."""
-        publication = EventPublication(event_tag, Any)
-        for _, value in cls.get_event_definitions().items():
-            if value.event_tag == publication.event_tag:
+        normalized = normalize_event_tag(event_tag)
+        for value in cls.get_event_definitions().values():
+            if value.event_tag == normalized:
                 return value
         raise ValueError(f"No event definition found for tag: {event_tag}")
 

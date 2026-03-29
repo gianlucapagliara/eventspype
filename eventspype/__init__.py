@@ -9,7 +9,13 @@ from eventspype.broker.serializer import (
     JsonEventSerializer,
     make_json_safe,
 )
-from eventspype.event import Event, EventTag
+from eventspype.event import (
+    Event,
+    EventTag,
+    TagEnum,
+    format_event_tag,
+    normalize_event_tag,
+)
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
@@ -26,6 +32,9 @@ __all__ = [
     # Core Event Types
     "Event",
     "EventTag",
+    "TagEnum",
+    "normalize_event_tag",
+    "format_event_tag",
     # Brokers
     "MessageBroker",
     "LocalBroker",
