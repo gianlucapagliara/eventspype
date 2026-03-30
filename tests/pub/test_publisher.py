@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from eventspype.broker.local import LocalBroker
+from eventspype.event import normalize_event_tag
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.subscriber import EventSubscriber
@@ -103,7 +104,7 @@ def test_publish_event(publisher: EventPublisher, subscriber: MockSubscriber) ->
 
     assert len(subscriber.received_messages) == 1
     assert subscriber.received_messages[0] == test_message
-    assert subscriber.received_tags[0] == MockEvents.EVENT_1.value
+    assert subscriber.received_tags[0] == normalize_event_tag(MockEvents.EVENT_1)
     assert subscriber.received_callers[0] == publisher
 
 
@@ -214,9 +215,9 @@ def test_broker_setter_migrates_from_old_broker() -> None:
 
     # Verify old broker no longer dispatches to subscriber
     old_broker.publish(
-        str(MockEvents.EVENT_1.value),
+        str(normalize_event_tag(MockEvents.EVENT_1)),
         Event1(message="stale"),
-        MockEvents.EVENT_1.value,
+        normalize_event_tag(MockEvents.EVENT_1),
         publisher,
     )
     assert len(subscriber.received_messages) == 2  # no new messages

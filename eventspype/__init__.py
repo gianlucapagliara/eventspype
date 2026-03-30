@@ -12,6 +12,7 @@ from eventspype.broker.serializer import (
 from eventspype.event import (
     Event,
     EventTag,
+    NormalizedTag,
     TagEnum,
     format_event_tag,
     normalize_event_tag,
@@ -32,6 +33,7 @@ __all__ = [
     # Core Event Types
     "Event",
     "EventTag",
+    "NormalizedTag",
     "TagEnum",
     "normalize_event_tag",
     "format_event_tag",

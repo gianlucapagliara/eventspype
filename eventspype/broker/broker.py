@@ -14,7 +14,9 @@ class MessageBroker:
     """
 
     @abstractmethod
-    def publish(self, channel: str, event: Any, event_tag: int, caller: Any) -> None:
+    def publish(
+        self, channel: str, event: Any, event_tag: int | str, caller: Any
+    ) -> None:
         """Publish an event to a channel.
 
         Args:

@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from eventspype.event import normalize_event_tag
 from eventspype.pub.multipublisher import MultiPublisher
 from eventspype.pub.publication import EventPublication
 from eventspype.sub.subscriber import EventSubscriber
@@ -112,7 +113,7 @@ def test_publish_event(publisher: MockPublisher, subscriber: MockSubscriber) -> 
 
     assert len(subscriber.received_messages) == 1
     assert subscriber.received_messages[0] == event
-    assert subscriber.received_tags[0] == MockEvents.EVENT_1.value
+    assert subscriber.received_tags[0] == normalize_event_tag(MockEvents.EVENT_1)
 
 
 def test_publish_event_invalid_type(
@@ -168,7 +169,7 @@ def test_add_subscriber_with_callback(publisher: MockPublisher) -> None:
 
     assert len(messages) == 1
     assert messages[0] == "test"
-    assert tags[0] == MockEvents.EVENT_1.value
+    assert tags[0] == normalize_event_tag(MockEvents.EVENT_1)
 
 
 def test_remove_subscriber_with_callback(publisher: MockPublisher) -> None:

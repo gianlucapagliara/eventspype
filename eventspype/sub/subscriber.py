@@ -4,7 +4,7 @@ from typing import Any
 
 class EventSubscriber:
     def __call__(
-        self, arg: Any, current_event_tag: int, current_event_caller: Any
+        self, arg: Any, current_event_tag: int | str, current_event_caller: Any
     ) -> None:
         self.call(arg, current_event_tag, current_event_caller)
 
@@ -12,7 +12,7 @@ class EventSubscriber:
     def call(
         self,
         arg: Any,
-        current_event_tag: int,
+        current_event_tag: int | str,
         current_event_caller: Any,
     ) -> None:
         raise NotImplementedError

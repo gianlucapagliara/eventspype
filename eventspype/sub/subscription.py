@@ -97,7 +97,7 @@ class EventSubscription:
         for event_tag in tags:
             self._unsubscribe(publisher, subscriber, event_tag)
 
-    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[int]:
+    def _get_event_tags(self, event_tag: EventTag | list[EventTag]) -> list[int | str]:
         tags = event_tag if isinstance(event_tag, list) else [event_tag]
         return [normalize_event_tag(tag) for tag in tags]
 

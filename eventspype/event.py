@@ -1,9 +1,10 @@
-import hashlib
 from enum import Enum
 
 # Type alias for event tags that can be Enum values, integers, or strings
-# Strings are automatically hashed to integers for internal use
 EventTag = Enum | int | str
+
+# The normalized form after resolving Enums and uppercasing strings
+NormalizedTag = int | str
 
 
 class TagEnum(Enum):
@@ -32,16 +33,18 @@ class TagEnum(Enum):
         return obj
 
 
-def normalize_event_tag(tag: EventTag) -> int:
-    """Normalize an event tag to an integer.
+def normalize_event_tag(tag: EventTag) -> NormalizedTag:
+    """Normalize an event tag to its canonical form.
 
-    Enums are converted to their value, strings are hashed deterministically
-    using MD5 for cross-process consistency, and integers are returned as-is.
+    - Enums use their identity: ``"ClassName.MEMBER_NAME"``.
+      Different enum classes with the same value are distinct.
+    - Strings are uppercased for case-insensitive matching.
+    - Integers are returned as-is.
     """
     if isinstance(tag, Enum):
-        tag = tag.value
+        return f"{tag.__class__.__name__}.{tag.name}"
     if isinstance(tag, str):
-        return int(hashlib.md5(tag.upper().encode("utf-8")).hexdigest()[:8], 16)
+        return tag.upper()
     if isinstance(tag, int):
         return tag
     raise ValueError(f"Invalid event tag: {tag}")

@@ -80,38 +80,48 @@ class TestTagEnumInvalidValues:
 
 class TestTagEnumNormalization:
     def test_int_tag_normalizes(self) -> None:
-        assert normalize_event_tag(IntTagEnum.EVENT_A) == 1
-        assert normalize_event_tag(IntTagEnum.EVENT_B) == 2
+        assert normalize_event_tag(IntTagEnum.EVENT_A) == "IntTagEnum.EVENT_A"
+        assert normalize_event_tag(IntTagEnum.EVENT_B) == "IntTagEnum.EVENT_B"
 
     def test_str_tag_normalizes(self) -> None:
         result = normalize_event_tag(StrTagEnum.USER_CREATED)
-        assert isinstance(result, int)
-        # Should match direct string normalization
-        assert result == normalize_event_tag("user_created")
+        assert isinstance(result, str)
+        assert result == "StrTagEnum.USER_CREATED"
 
     def test_mixed_tag_normalizes(self) -> None:
-        assert normalize_event_tag(MixedTagEnum.INT_EVENT) == 10
-        str_result = normalize_event_tag(MixedTagEnum.STR_EVENT)
-        assert str_result == normalize_event_tag("some_event")
+        assert normalize_event_tag(MixedTagEnum.INT_EVENT) == "MixedTagEnum.INT_EVENT"
+        assert normalize_event_tag(MixedTagEnum.STR_EVENT) == "MixedTagEnum.STR_EVENT"
+
+    def test_different_enums_same_value_are_distinct(self) -> None:
+        """Different enum classes with the same value should NOT collide."""
+
+        class EnumA(TagEnum):
+            EVENT = 1
+
+        class EnumB(TagEnum):
+            EVENT = 1
+
+        assert normalize_event_tag(EnumA.EVENT) != normalize_event_tag(EnumB.EVENT)
 
 
 class TestTagEnumWithPublication:
     def test_int_tag_publication(self) -> None:
         pub = EventPublication(IntTagEnum.EVENT_A, str)
-        assert pub.event_tag == 1
+        assert pub.event_tag == "IntTagEnum.EVENT_A"
         assert pub.original_tag is IntTagEnum.EVENT_A
 
     def test_str_tag_publication(self) -> None:
         pub = EventPublication(StrTagEnum.USER_CREATED, str)
-        assert isinstance(pub.event_tag, int)
+        assert isinstance(pub.event_tag, str)
+        assert pub.event_tag == "StrTagEnum.USER_CREATED"
         assert pub.original_tag is StrTagEnum.USER_CREATED
 
-    def test_matches_plain_enum(self) -> None:
-        """TagEnum publications should match equivalent plain Enum publications."""
+    def test_different_enum_classes_do_not_match(self) -> None:
+        """Different enum classes should produce different tags even with same value."""
 
         class PlainEnum(Enum):
             EVENT_A = 1
 
         pub_tag = EventPublication(IntTagEnum.EVENT_A, str)
         pub_plain = EventPublication(PlainEnum.EVENT_A, str)
-        assert pub_tag.event_tag == pub_plain.event_tag
+        assert pub_tag.event_tag != pub_plain.event_tag

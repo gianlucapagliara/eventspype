@@ -35,22 +35,34 @@ class TestNormalizeEventTagIntegers:
 
 class TestNormalizeEventTagEnums:
     def test_enum_with_int_value(self) -> None:
-        assert normalize_event_tag(SampleEvents.EVENT_A) == 10
-        assert normalize_event_tag(SampleEvents.EVENT_B) == 20
+        assert normalize_event_tag(SampleEvents.EVENT_A) == "SampleEvents.EVENT_A"
+        assert normalize_event_tag(SampleEvents.EVENT_B) == "SampleEvents.EVENT_B"
 
     def test_enum_with_string_value(self) -> None:
-        """Enum with string value should hash the string."""
+        """Enum with string value should use identity, not the value."""
         result = normalize_event_tag(StringEnum.EVENT_X)
-        assert isinstance(result, int)
+        assert isinstance(result, str)
+        assert result == "StringEnum.EVENT_X"
         # Should match what EventPublication produces
         pub = EventPublication(StringEnum.EVENT_X, str)
         assert result == pub.event_tag
 
+    def test_different_enums_same_value(self) -> None:
+        """Different enum classes with the same value must not collide."""
+
+        class OtherEvents(Enum):
+            EVENT_A = 10
+
+        assert normalize_event_tag(SampleEvents.EVENT_A) != normalize_event_tag(
+            OtherEvents.EVENT_A
+        )
+
 
 class TestNormalizeEventTagStrings:
-    def test_string_produces_int(self) -> None:
+    def test_string_produces_string(self) -> None:
         result = normalize_event_tag("test_event")
-        assert isinstance(result, int)
+        assert isinstance(result, str)
+        assert result == "TEST_EVENT"
 
     def test_case_insensitive(self) -> None:
         """Different cases of the same string should produce the same tag."""
@@ -62,19 +74,13 @@ class TestNormalizeEventTagStrings:
 
     def test_empty_string(self) -> None:
         result = normalize_event_tag("")
-        assert isinstance(result, int)
-        # Should be consistent
+        assert isinstance(result, str)
         assert normalize_event_tag("") == normalize_event_tag("")
 
     def test_unicode_string(self) -> None:
         result = normalize_event_tag("événement")
-        assert isinstance(result, int)
+        assert isinstance(result, str)
         assert result == normalize_event_tag("ÉVÉNEMENT")
-
-    def test_32bit_range(self) -> None:
-        """String tags should produce 32-bit integers (first 8 hex chars of MD5)."""
-        result = normalize_event_tag("any_string")
-        assert 0 <= result < 2**32
 
     def test_matches_publication(self) -> None:
         """normalize_event_tag should produce the same result as EventPublication."""

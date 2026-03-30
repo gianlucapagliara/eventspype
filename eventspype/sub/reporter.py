@@ -40,7 +40,7 @@ class ReportingEventSubscriber(EventSubscriber):
     def call(
         self,
         event_object: Any,
-        current_event_tag: int,
+        current_event_tag: int | str,
         current_event_caller: Any,
     ) -> None:
         """

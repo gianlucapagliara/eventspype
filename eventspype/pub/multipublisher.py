@@ -1,8 +1,9 @@
+from enum import Enum
 from functools import lru_cache
 from typing import Any
 
 from eventspype.broker.broker import MessageBroker
-from eventspype.event import EventTag, normalize_event_tag
+from eventspype.event import EventTag, NormalizedTag, normalize_event_tag
 from eventspype.pub.publication import EventPublication
 from eventspype.pub.publisher import EventPublisher
 from eventspype.sub.functional import FunctionalEventSubscriber
@@ -49,9 +50,9 @@ class MultiPublisher:
 
     @classmethod
     @lru_cache(maxsize=256)
-    def _tag_to_publication(cls) -> dict[int, EventPublication]:
+    def _tag_to_publication(cls) -> dict[NormalizedTag, EventPublication]:
         """Reverse mapping from normalized tag to publication for O(1) lookup."""
-        result: dict[int, EventPublication] = {}
+        result: dict[NormalizedTag, EventPublication] = {}
         for name, pub in cls.get_event_definitions().items():
             if pub.event_tag in result:
                 existing = result[pub.event_tag]
@@ -74,10 +75,23 @@ class MultiPublisher:
         return True
 
     @classmethod
-    def get_event_definition_by_tag(cls, event_tag: EventTag) -> EventPublication:
-        """Get the event definition by event tag."""
+    def get_event_definition_by_tag(
+        cls, event_tag: EventTag | NormalizedTag
+    ) -> EventPublication:
+        """Get the event definition by event tag.
+
+        Accepts both raw ``EventTag`` values (Enum, int, str) and
+        already-normalized tags.  Already-normalized values (int or str
+        that are not Enum members) are used directly as lookup keys to
+        avoid double-normalization.
+        """
+        tag_map = cls._tag_to_publication()
+        # If the tag is already a valid key, use it directly
+        if not isinstance(event_tag, Enum) and event_tag in tag_map:
+            return tag_map[event_tag]
+        # Otherwise normalize first (handles Enum → identity string)
         normalized = normalize_event_tag(event_tag)
-        publication = cls._tag_to_publication().get(normalized)
+        publication = tag_map.get(normalized)
         if publication is None:
             raise ValueError(f"No event definition found for tag: {event_tag}")
         return publication

@@ -38,7 +38,9 @@ class LocalBroker(MessageBroker):
             self._logger = logging.getLogger(__name__)
         return self._logger
 
-    def publish(self, channel: str, event: Any, event_tag: int, caller: Any) -> None:
+    def publish(
+        self, channel: str, event: Any, event_tag: int | str, caller: Any
+    ) -> None:
         # Snapshot under lock, iterate outside
         with self._lock:
             refs = self._subscriptions.get(channel)

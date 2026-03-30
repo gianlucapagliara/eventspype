@@ -169,3 +169,4 @@ cython_debug/
 # Other
 **/.DS_Store
 .vscode/*
+.omc/

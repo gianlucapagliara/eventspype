@@ -42,7 +42,7 @@ class QueueEventSubscriber(EventSubscriber):
     def call(
         self,
         arg: Any,
-        current_event_tag: int,
+        current_event_tag: int | str,
         current_event_caller: Any,
     ) -> None:
         event_dict = self._build_event_dict(
@@ -87,7 +87,7 @@ class QueueEventSubscriber(EventSubscriber):
             return len(self._queues)
 
     @staticmethod
-    def _build_event_dict(event: Any, tag: int, caller: Any) -> dict[str, Any]:
+    def _build_event_dict(event: Any, tag: int | str, caller: Any) -> dict[str, Any]:
         caller_name = getattr(caller, "name", None) or caller.__class__.__name__
         return {
             "event_type": type(event).__qualname__,
