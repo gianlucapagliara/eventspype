@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from collections.abc import Callable
-from functools import cache, wraps
+from functools import lru_cache, wraps
 from typing import Any, TypeVar
 
 from eventspype.pub.publisher import EventPublisher
@@ -19,7 +19,7 @@ class MultiSubscriber:
     # === Class Methods ===
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=256)
     def get_event_definitions(cls) -> dict[str, EventSubscription]:
         """Get all event subscriptions defined in the class and its parent classes."""
         result: dict[str, EventSubscription] = {}
@@ -34,7 +34,7 @@ class MultiSubscriber:
         return result
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=256)
     def _valid_subscriptions(cls) -> frozenset[EventSubscription]:
         """Get the set of valid subscriptions for O(1) membership testing."""
         return frozenset(cls.get_event_definitions().values())

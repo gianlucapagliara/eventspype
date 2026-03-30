@@ -60,18 +60,33 @@ class JsonEventSerializer(EventSerializer):
         return data
 
 
-def make_json_safe(obj: Any) -> Any:
-    """Recursively convert a value into a JSON-serializable form."""
+def make_json_safe(obj: Any, _seen: set[int] | None = None) -> Any:
+    """Recursively convert a value into a JSON-serializable form.
+
+    Tracks object identity to avoid infinite recursion on circular references.
+    """
     if obj is None or isinstance(obj, bool | int | float | str):
         return obj
-    if isinstance(obj, Enum):
-        return make_json_safe(obj.value)
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return make_json_safe(dataclasses.asdict(obj))
-    if hasattr(obj, "_asdict"):  # NamedTuple
-        return make_json_safe(obj._asdict())
-    if isinstance(obj, dict):
-        return {str(k): make_json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, list | tuple | set | frozenset):
-        return [make_json_safe(item) for item in obj]
-    return str(obj)
+
+    # Guard against circular references
+    obj_id = id(obj)
+    if _seen is None:
+        _seen = set()
+    if obj_id in _seen:
+        return f"<circular ref {type(obj).__name__}>"
+    _seen.add(obj_id)
+
+    try:
+        if isinstance(obj, Enum):
+            return make_json_safe(obj.value, _seen)
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return make_json_safe(dataclasses.asdict(obj), _seen)
+        if hasattr(obj, "_asdict"):  # NamedTuple
+            return make_json_safe(obj._asdict(), _seen)
+        if isinstance(obj, dict):
+            return {str(k): make_json_safe(v, _seen) for k, v in obj.items()}
+        if isinstance(obj, list | tuple | set | frozenset):
+            return [make_json_safe(item, _seen) for item in obj]
+        return str(obj)
+    finally:
+        _seen.discard(obj_id)

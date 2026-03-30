@@ -1,10 +1,21 @@
 import logging
+import threading
 import weakref
 from typing import Any
 
 from eventspype.broker.broker import MessageBroker
 from eventspype.pub.publication import EventPublication
 from eventspype.sub.subscriber import EventSubscriber
+
+
+def _locked_discard(
+    lock: threading.Lock,
+    subscribers: set[weakref.ReferenceType[EventSubscriber]],
+    ref: weakref.ReferenceType[EventSubscriber],
+) -> None:
+    """Weakref finalizer callback that removes a dead ref under the lock."""
+    with lock:
+        subscribers.discard(ref)
 
 
 class EventPublisher:
@@ -18,6 +29,10 @@ class EventPublisher:
 
     Optionally accepts a MessageBroker for external event dispatch (e.g. Redis, RabbitMQ).
     When a broker is provided, events are routed through it instead of being dispatched directly.
+
+    Thread safety: a ``threading.Lock`` protects the subscriber set so that
+    ``add_subscriber`` / ``remove_subscriber`` and ``_dispatch_local`` can be
+    used concurrently from different threads.
     """
 
     def __init__(
@@ -27,6 +42,7 @@ class EventPublisher:
     ) -> None:
         self._publication = publication
         self._broker = broker
+        self._lock = threading.Lock()
         self._subscribers: set[weakref.ReferenceType[EventSubscriber]] = set()
         self._logger: logging.Logger | None = None
 
@@ -66,8 +82,12 @@ class EventPublisher:
         """Add a subscriber for this publisher's event."""
         # Create weak reference with a finalizer callback for automatic cleanup
         subscribers = self._subscribers
-        subscriber_ref = weakref.ref(subscriber, lambda ref: subscribers.discard(ref))
-        self._subscribers.add(subscriber_ref)
+        lock = self._lock
+        subscriber_ref = weakref.ref(
+            subscriber, lambda ref: _locked_discard(lock, subscribers, ref)
+        )
+        with self._lock:
+            self._subscribers.add(subscriber_ref)
 
         # Register with broker if present
         if self._broker is not None:
@@ -78,8 +98,8 @@ class EventPublisher:
         # Create a temporary weak reference for comparison
         subscriber_ref = weakref.ref(subscriber)
 
-        # Remove the subscriber if it exists
-        self._subscribers.discard(subscriber_ref)
+        with self._lock:
+            self._subscribers.discard(subscriber_ref)
 
         # Unregister from broker if present
         if self._broker is not None:
@@ -87,12 +107,9 @@ class EventPublisher:
 
     def get_subscribers(self) -> list[EventSubscriber]:
         """Get all active subscribers."""
-        # Return only the subscribers that are still alive
-        return [
-            subscriber
-            for subscriber in (ref() for ref in self._subscribers)
-            if subscriber is not None
-        ]
+        with self._lock:
+            refs = list(self._subscribers)
+        return [s for s in (ref() for ref in refs) if s is not None]
 
     def publish(self, event: Any, caller: Any | None = None) -> None:
         """Trigger an event, notifying all subscribers with the given message."""
@@ -113,9 +130,11 @@ class EventPublisher:
 
     def _dispatch_local(self, event: Any, caller: Any | None = None) -> None:
         """Dispatch event directly to local subscribers."""
-        # Use a tuple snapshot for iteration — cheaper than set.copy() since we
-        # only need iteration, not set operations
-        for subscriber_ref in tuple(self._subscribers):
+        # Snapshot under lock, iterate outside
+        with self._lock:
+            snapshot = tuple(self._subscribers)
+
+        for subscriber_ref in snapshot:
             subscriber = subscriber_ref()
             if subscriber is None:
                 continue

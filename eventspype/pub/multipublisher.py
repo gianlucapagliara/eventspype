@@ -1,4 +1,4 @@
-from functools import cache
+from functools import lru_cache
 from typing import Any
 
 from eventspype.broker.broker import MessageBroker
@@ -27,7 +27,7 @@ class MultiPublisher:
     # === Class Methods ===
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=256)
     def get_event_definitions(cls) -> dict[str, EventPublication]:
         """Get all event publications defined in the class and its parent classes."""
         result: dict[str, EventPublication] = {}
@@ -42,13 +42,13 @@ class MultiPublisher:
         return result
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=256)
     def _valid_publications(cls) -> frozenset[EventPublication]:
         """Get the set of valid publications for O(1) membership testing."""
         return frozenset(cls.get_event_definitions().values())
 
     @classmethod
-    @cache
+    @lru_cache(maxsize=256)
     def _tag_to_publication(cls) -> dict[int, EventPublication]:
         """Reverse mapping from normalized tag to publication for O(1) lookup."""
         result: dict[int, EventPublication] = {}

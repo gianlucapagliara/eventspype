@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 import time
 from typing import Any
@@ -12,7 +13,8 @@ class QueueEventSubscriber(EventSubscriber):
 
     Each consumer gets its own ``asyncio.Queue`` via :meth:`subscribe_consumer`.
     When an event is published, :meth:`call` serializes it into a plain dict and
-    places it into every registered queue (full queues are silently skipped).
+    places it into every registered queue (full queues are skipped with a
+    warning log).
 
     .. note::
         ``EventPublisher`` holds a **weak reference** to its subscribers.
@@ -29,6 +31,13 @@ class QueueEventSubscriber(EventSubscriber):
         self._max_queue_size = max_queue_size
         self._queues: list[asyncio.Queue[dict[str, Any]]] = []
         self._lock = threading.Lock()
+        self._logger: logging.Logger | None = None
+
+    @property
+    def logger(self) -> logging.Logger:
+        if self._logger is None:
+            self._logger = logging.getLogger(__name__)
+        return self._logger
 
     def call(
         self,
@@ -48,7 +57,11 @@ class QueueEventSubscriber(EventSubscriber):
             try:
                 queue.put_nowait(event_dict)
             except asyncio.QueueFull:
-                pass
+                self.logger.warning(
+                    "Consumer queue full (max=%d), event dropped: %s",
+                    self._max_queue_size,
+                    event_dict.get("event_type", "unknown"),
+                )
 
     def subscribe_consumer(self) -> asyncio.Queue[dict[str, Any]]:
         """Create and register a new consumer queue."""

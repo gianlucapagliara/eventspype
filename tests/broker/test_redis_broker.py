@@ -51,7 +51,7 @@ def mock_redis() -> MagicMock:
 
 @pytest.fixture
 def broker(mock_redis: MagicMock) -> RedisBroker:
-    return RedisBroker(mock_redis)
+    return RedisBroker(mock_redis, allow_unregistered_classes=True)
 
 
 @pytest.fixture
@@ -526,7 +526,7 @@ def test_resolve_class_invalid_attr(broker: RedisBroker) -> None:
 
 def test_publish_subscribe_roundtrip(mock_redis: MagicMock) -> None:
     """Simulate a full publish-subscribe cycle by capturing the handler and invoking it."""
-    broker = RedisBroker(mock_redis)
+    broker = RedisBroker(mock_redis, allow_unregistered_classes=True)
     subscriber = MockSubscriber()
 
     broker.subscribe("events", subscriber)
@@ -550,3 +550,109 @@ def test_publish_subscribe_roundtrip(mock_redis: MagicMock) -> None:
     assert len(subscriber.received_messages) == 1
     assert subscriber.received_messages[0] == SampleEvent(message="roundtrip")
     assert subscriber.received_tags[0] == 99
+
+
+# --- Class allowlist tests ---
+
+
+def test_resolve_class_rejects_unregistered_by_default(mock_redis: MagicMock) -> None:
+    """Default broker rejects unregistered classes."""
+    broker = RedisBroker(mock_redis)
+    with pytest.raises(ValueError, match="not registered"):
+        broker._resolve_class(__name__, "SampleEvent")
+
+
+def test_resolve_class_allows_registered(mock_redis: MagicMock) -> None:
+    """Registered classes are resolved successfully."""
+    broker = RedisBroker(mock_redis)
+    broker.register_event_class(SampleEvent)
+    cls = broker._resolve_class(__name__, "SampleEvent")
+    assert cls is SampleEvent
+
+
+def test_register_event_classes_bulk(mock_redis: MagicMock) -> None:
+    """register_event_classes registers multiple classes."""
+    broker = RedisBroker(mock_redis)
+    broker.register_event_classes(SampleEvent, AnotherEvent)
+    assert broker._resolve_class(__name__, "SampleEvent") is SampleEvent
+    assert broker._resolve_class(__name__, "AnotherEvent") is AnotherEvent
+
+
+def test_handler_dispatches_registered_class(mock_redis: MagicMock) -> None:
+    """Handler works with registered classes (default safe mode)."""
+    broker = RedisBroker(mock_redis)
+    broker.register_event_class(SampleEvent)
+    subscriber = MockSubscriber()
+    broker._subscribers["chan1"] = [subscriber]
+    handler = broker._make_handler("chan1")
+
+    serializer = JsonEventSerializer()
+    payload = serializer.serialize(SampleEvent(message="safe")).decode("utf-8")
+    handler(
+        {
+            "type": "message",
+            "data": json.dumps(
+                {
+                    "event_tag": 1,
+                    "event_class": "SampleEvent",
+                    "event_module": __name__,
+                    "payload": payload,
+                }
+            ),
+        }
+    )
+
+    assert len(subscriber.received_messages) == 1
+    assert subscriber.received_messages[0] == SampleEvent(message="safe")
+
+
+def test_handler_rejects_unregistered_class(mock_redis: MagicMock, caplog: Any) -> None:
+    """Handler drops messages for unregistered classes in default mode."""
+    broker = RedisBroker(mock_redis)
+    subscriber = MockSubscriber()
+    broker._subscribers["chan1"] = [subscriber]
+    handler = broker._make_handler("chan1")
+
+    handler(
+        {
+            "type": "message",
+            "data": json.dumps(
+                {
+                    "event_tag": 1,
+                    "event_class": "SampleEvent",
+                    "event_module": __name__,
+                    "payload": '{"message": "attack"}',
+                }
+            ),
+        }
+    )
+
+    assert len(subscriber.received_messages) == 0
+
+
+# --- Context manager tests ---
+
+
+def test_context_manager(mock_redis: MagicMock) -> None:
+    """Broker can be used as a context manager for cleanup."""
+    sub = MockSubscriber()
+    with RedisBroker(mock_redis) as broker:
+        broker.subscribe("chan1", sub)
+        pubsub = mock_redis.pubsub.return_value
+
+    pubsub.unsubscribe.assert_called()
+    pubsub.close.assert_called_once()
+    assert broker._pubsub is None
+
+
+# --- Duplicate subscriber tests ---
+
+
+def test_subscribe_deduplicates(mock_redis: MagicMock) -> None:
+    """Same subscriber is not added twice."""
+    broker = RedisBroker(mock_redis)
+    sub = MockSubscriber()
+    broker.subscribe("chan1", sub)
+    broker.subscribe("chan1", sub)
+
+    assert len(broker._subscribers["chan1"]) == 1
