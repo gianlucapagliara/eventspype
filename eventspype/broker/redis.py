@@ -125,10 +125,9 @@ class RedisBroker(MessageBroker):
             subscribers = self._subscribers[channel]
             subscriber_ref = weakref.ref(
                 subscriber,
-                lambda ref,
-                _l=self._lock,
-                _s=self._subscribers,
-                _c=channel: _locked_discard_and_prune(_l, _s, _c, ref),
+                lambda ref, _l=self._lock, _s=self._subscribers, _c=channel: (
+                    _locked_discard_and_prune(_l, _s, _c, ref)
+                ),
             )
             subscribers.add(subscriber_ref)
 
