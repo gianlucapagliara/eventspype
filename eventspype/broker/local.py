@@ -3,18 +3,8 @@ import threading
 import weakref
 from typing import Any
 
-from eventspype.broker.broker import MessageBroker
+from eventspype.broker.broker import MessageBroker, _locked_discard_and_prune
 from eventspype.sub.subscriber import EventSubscriber
-
-
-def _locked_discard(
-    lock: threading.Lock,
-    subscribers: set[weakref.ReferenceType[EventSubscriber]],
-    ref: weakref.ReferenceType[EventSubscriber],
-) -> None:
-    """Weakref finalizer callback that removes a dead ref under the lock."""
-    with lock:
-        subscribers.discard(ref)
 
 
 class LocalBroker(MessageBroker):
@@ -64,18 +54,23 @@ class LocalBroker(MessageBroker):
         with self._lock:
             if channel not in self._subscriptions:
                 self._subscriptions[channel] = set()
-            # Use weakref finalizer callback for O(1) amortized cleanup
+            # Use weakref finalizer callback for O(1) amortized cleanup; the
+            # finalizer also prunes the channel entry when it becomes empty
             subscribers = self._subscriptions[channel]
-            lock = self._lock
             subscriber_ref = weakref.ref(
                 subscriber,
-                lambda ref, _l=lock, _s=subscribers: _locked_discard(_l, _s, ref),
+                lambda ref,
+                _l=self._lock,
+                _s=self._subscriptions,
+                _c=channel: _locked_discard_and_prune(_l, _s, _c, ref),
             )
             subscribers.add(subscriber_ref)
 
     def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
         with self._lock:
-            if channel not in self._subscriptions:
+            subscribers = self._subscriptions.get(channel)
+            if subscribers is None:
                 return
-            subscriber_ref = weakref.ref(subscriber)
-            self._subscriptions[channel].discard(subscriber_ref)
+            subscribers.discard(weakref.ref(subscriber))
+            if not subscribers:
+                del self._subscriptions[channel]

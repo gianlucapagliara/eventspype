@@ -1,5 +1,7 @@
+import gc
 import json
 import logging
+import weakref
 from dataclasses import dataclass
 from typing import Any
 from unittest.mock import MagicMock
@@ -213,7 +215,8 @@ def test_unsubscribe_removes_subscriber(
 
     broker.unsubscribe("chan1", sub1)
     assert len(broker._subscribers["chan1"]) == 1
-    assert broker._subscribers["chan1"][0] is sub2
+    remaining_ref = next(iter(broker._subscribers["chan1"]))
+    assert remaining_ref() is sub2
 
 
 def test_unsubscribe_last_subscriber_removes_channel(
@@ -232,7 +235,7 @@ def test_unsubscribe_last_subscriber_when_pubsub_none(
 ) -> None:
     broker = RedisBroker(mock_redis)
     # Manually set up state without pubsub
-    broker._subscribers["chan1"] = [subscriber]
+    broker._subscribers["chan1"] = {weakref.ref(subscriber)}
     broker.unsubscribe("chan1", subscriber)
 
     assert "chan1" not in broker._subscribers
@@ -340,7 +343,7 @@ def test_handler_skips_non_message_type(broker: RedisBroker) -> None:
 def test_handler_dispatches_event_to_subscribers(
     broker: RedisBroker, subscriber: MockSubscriber
 ) -> None:
-    broker._subscribers["chan1"] = [subscriber]
+    broker.subscribe("chan1", subscriber)
     handler = broker._make_handler("chan1")
 
     event = SampleEvent(message="test")
@@ -368,7 +371,8 @@ def test_handler_dispatches_event_to_subscribers(
 def test_handler_dispatches_to_multiple_subscribers(broker: RedisBroker) -> None:
     sub1 = MockSubscriber()
     sub2 = MockSubscriber()
-    broker._subscribers["chan1"] = [sub1, sub2]
+    broker.subscribe("chan1", sub1)
+    broker.subscribe("chan1", sub2)
     handler = broker._make_handler("chan1")
 
     event = SampleEvent(message="multi")
@@ -394,7 +398,7 @@ def test_handler_dispatches_to_multiple_subscribers(broker: RedisBroker) -> None
 
 def test_handler_catches_subscriber_error(broker: RedisBroker, caplog: Any) -> None:
     error_sub = ErrorSubscriber()
-    broker._subscribers["chan1"] = [error_sub]
+    broker.subscribe("chan1", error_sub)
     handler = broker._make_handler("chan1")
 
     event = SampleEvent(message="fail")
@@ -425,7 +429,8 @@ def test_handler_continues_after_subscriber_error(broker: RedisBroker) -> None:
     """Verify that an error in one subscriber doesn't prevent others from receiving the event."""
     error_sub = ErrorSubscriber()
     good_sub = MockSubscriber()
-    broker._subscribers["chan1"] = [error_sub, good_sub]
+    broker.subscribe("chan1", error_sub)
+    broker.subscribe("chan1", good_sub)
     handler = broker._make_handler("chan1")
 
     event = SampleEvent(message="partial")
@@ -583,7 +588,7 @@ def test_handler_dispatches_registered_class(mock_redis: MagicMock) -> None:
     broker = RedisBroker(mock_redis)
     broker.register_event_class(SampleEvent)
     subscriber = MockSubscriber()
-    broker._subscribers["chan1"] = [subscriber]
+    broker.subscribe("chan1", subscriber)
     handler = broker._make_handler("chan1")
 
     serializer = JsonEventSerializer()
@@ -610,7 +615,7 @@ def test_handler_rejects_unregistered_class(mock_redis: MagicMock, caplog: Any) 
     """Handler drops messages for unregistered classes in default mode."""
     broker = RedisBroker(mock_redis)
     subscriber = MockSubscriber()
-    broker._subscribers["chan1"] = [subscriber]
+    broker.subscribe("chan1", subscriber)
     handler = broker._make_handler("chan1")
 
     handler(
@@ -656,3 +661,49 @@ def test_subscribe_deduplicates(mock_redis: MagicMock) -> None:
     broker.subscribe("chan1", sub)
 
     assert len(broker._subscribers["chan1"]) == 1
+
+
+# --- Weak reference lifecycle tests ---
+
+
+def test_subscriber_garbage_collected_is_removed(broker: RedisBroker) -> None:
+    """Regression: subscribers are weakly referenced — garbage collection
+    removes them and prunes the channel entry instead of pinning them."""
+    sub = MockSubscriber()
+    broker.subscribe("chan1", sub)
+    assert "chan1" in broker._subscribers
+
+    del sub
+    gc.collect()
+
+    assert "chan1" not in broker._subscribers
+
+
+def test_live_subscriber_still_receives_after_other_dies(
+    broker: RedisBroker, subscriber: MockSubscriber
+) -> None:
+    """A garbage-collected subscriber must not affect delivery to live ones."""
+    temp = MockSubscriber()
+    broker.subscribe("chan1", subscriber)
+    broker.subscribe("chan1", temp)
+    del temp
+    gc.collect()
+
+    handler = broker._make_handler("chan1")
+    payload = JsonEventSerializer().serialize(SampleEvent(message="alive")).decode()
+    handler(
+        {
+            "type": "message",
+            "data": json.dumps(
+                {
+                    "event_tag": 1,
+                    "event_class": "SampleEvent",
+                    "event_module": __name__,
+                    "payload": payload,
+                }
+            ),
+        }
+    )
+
+    assert len(subscriber.received_messages) == 1
+    assert subscriber.received_messages[0] == SampleEvent(message="alive")

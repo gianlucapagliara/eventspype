@@ -1,10 +1,11 @@
 import json
 import logging
 import threading
+import weakref
 from types import TracebackType
 from typing import Any
 
-from eventspype.broker.broker import MessageBroker
+from eventspype.broker.broker import MessageBroker, _locked_discard_and_prune
 from eventspype.broker.serializer import EventSerializer, JsonEventSerializer
 from eventspype.sub.subscriber import EventSubscriber
 
@@ -18,6 +19,14 @@ class RedisBroker(MessageBroker):
     Events are serialized using the provided EventSerializer (defaults to JSON)
     and published to Redis channels. Subscribers on any connected process will
     receive the events.
+
+    Subscribers are held via **weak references**, consistent with
+    ``EventPublisher`` and ``LocalBroker``: the caller must keep a strong
+    reference to a subscriber for as long as it should remain subscribed.
+    When a subscriber is garbage collected it is automatically removed; the
+    Redis-side channel subscription is only torn down on an explicit
+    :meth:`unsubscribe` or :meth:`close` (the listener simply finds no local
+    subscribers in the meantime).
 
     **Security:** By default, only event classes explicitly registered via
     :meth:`register_event_class` are allowed during deserialization.  This
@@ -46,7 +55,8 @@ class RedisBroker(MessageBroker):
         self._channel_prefix = channel_prefix
         self._allow_unregistered_classes = allow_unregistered_classes
         self._pubsub: Any = None
-        self._subscribers: dict[str, list[EventSubscriber]] = {}
+        self._lock = threading.Lock()
+        self._subscribers: dict[str, set[weakref.ReferenceType[EventSubscriber]]] = {}
         self._allowed_classes: dict[str, type] = {}
         self._listener_thread: threading.Thread | None = None
         self._logger: logging.Logger | None = None
@@ -105,30 +115,41 @@ class RedisBroker(MessageBroker):
         self._redis.publish(prefixed, message)
 
     def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
-        if channel not in self._subscribers:
-            self._subscribers[channel] = []
+        with self._lock:
+            is_new_channel = channel not in self._subscribers
+            if is_new_channel:
+                self._subscribers[channel] = set()
+            # Weakref with a finalizer callback: dead subscribers are removed
+            # automatically and the channel entry is pruned when it empties.
+            # Equal refs hash the same, so the set also deduplicates.
+            subscribers = self._subscribers[channel]
+            subscriber_ref = weakref.ref(
+                subscriber,
+                lambda ref,
+                _l=self._lock,
+                _s=self._subscribers,
+                _c=channel: _locked_discard_and_prune(_l, _s, _c, ref),
+            )
+            subscribers.add(subscriber_ref)
+
+        if is_new_channel:
             self._ensure_pubsub()
             prefixed = self._prefixed_channel(channel)
             self._pubsub.subscribe(**{prefixed: self._make_handler(channel)})
-
-        # Prevent duplicate subscribers
-        if subscriber not in self._subscribers[channel]:
-            self._subscribers[channel].append(subscriber)
         self._ensure_listener()
 
     def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
-        if channel not in self._subscribers:
-            return
+        with self._lock:
+            subscribers = self._subscribers.get(channel)
+            if subscribers is None:
+                return
+            subscribers.discard(weakref.ref(subscriber))
+            channel_empty = not subscribers
+            if channel_empty:
+                del self._subscribers[channel]
 
-        self._subscribers[channel] = [
-            s for s in self._subscribers[channel] if s is not subscriber
-        ]
-
-        if not self._subscribers[channel]:
-            prefixed = self._prefixed_channel(channel)
-            if self._pubsub is not None:
-                self._pubsub.unsubscribe(prefixed)
-            del self._subscribers[channel]
+        if channel_empty and self._pubsub is not None:
+            self._pubsub.unsubscribe(self._prefixed_channel(channel))
 
     def close(self) -> None:
         """Clean up Redis pubsub resources."""
@@ -169,7 +190,15 @@ class RedisBroker(MessageBroker):
                 )
                 event = self._serializer.deserialize(payload, event_class)
 
-                for subscriber in self._subscribers.get(channel, []):
+                # Snapshot under lock, iterate outside (listener thread)
+                with self._lock:
+                    refs = self._subscribers.get(channel)
+                    snapshot = tuple(refs) if refs else ()
+
+                for subscriber_ref in snapshot:
+                    subscriber = subscriber_ref()
+                    if subscriber is None:
+                        continue
                     try:
                         subscriber(event, event_tag, self)
                     except Exception:

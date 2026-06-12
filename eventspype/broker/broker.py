@@ -1,7 +1,27 @@
+import threading
+import weakref
 from abc import abstractmethod
 from typing import Any
 
 from eventspype.sub.subscriber import EventSubscriber
+
+
+def _locked_discard_and_prune(
+    lock: threading.Lock,
+    subscriptions: dict[str, set[weakref.ReferenceType[EventSubscriber]]],
+    channel: str,
+    ref: weakref.ReferenceType[EventSubscriber],
+) -> None:
+    """Weakref finalizer callback that removes a dead ref under the lock and
+    drops the channel entry when its subscriber set becomes empty, so that
+    channels do not accumulate indefinitely."""
+    with lock:
+        subscribers = subscriptions.get(channel)
+        if subscribers is None:
+            return
+        subscribers.discard(ref)
+        if not subscribers:
+            del subscriptions[channel]
 
 
 class MessageBroker:
