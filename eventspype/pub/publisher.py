@@ -44,6 +44,12 @@ class EventPublisher:
         self._broker = broker
         self._lock = threading.Lock()
         self._subscribers: set[weakref.ReferenceType[EventSubscriber]] = set()
+        # Precomputed snapshot of the subscriber set, rebuilt on add/remove
+        # under the lock. publish() reads it without locking (the attribute
+        # swap is atomic), avoiding a lock acquisition and an O(n) tuple
+        # build per publish. Finalizers only clean the set: a dead ref left
+        # in the snapshot dereferences to None and is skipped on dispatch.
+        self._snapshot: tuple[weakref.ReferenceType[EventSubscriber], ...] = ()
         self._logger: logging.Logger | None = None
 
         # Channel name derived from the publication tag for broker routing
@@ -88,6 +94,7 @@ class EventPublisher:
         )
         with self._lock:
             self._subscribers.add(subscriber_ref)
+            self._snapshot = tuple(self._subscribers)
 
         # Register with broker if present
         if self._broker is not None:
@@ -100,6 +107,7 @@ class EventPublisher:
 
         with self._lock:
             self._subscribers.discard(subscriber_ref)
+            self._snapshot = tuple(self._subscribers)
 
         # Unregister from broker if present
         if self._broker is not None:
@@ -130,9 +138,11 @@ class EventPublisher:
 
     def _dispatch_local(self, event: Any, caller: Any | None = None) -> None:
         """Dispatch event directly to local subscribers."""
-        # Snapshot under lock, iterate outside
-        with self._lock:
-            snapshot = tuple(self._subscribers)
+        # Lock-free read of the precomputed snapshot; see __init__ for the
+        # invariants. Loop invariants are hoisted out of the dispatch loop.
+        snapshot = self._snapshot
+        event_tag = self._publication.event_tag
+        source = caller or self
 
         for subscriber_ref in snapshot:
             subscriber = subscriber_ref()
@@ -140,7 +150,7 @@ class EventPublisher:
                 continue
 
             try:
-                subscriber(event, self._publication.event_tag, caller or self)
+                subscriber(event, event_tag, source)
             except Exception:
                 self._log_exception(event)
 

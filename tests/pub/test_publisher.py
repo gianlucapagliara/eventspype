@@ -262,15 +262,38 @@ def test_dispatch_local_dead_subscriber_ref() -> None:
     # Kill the temp subscriber - its weak ref will return None
     del temp
 
-    # Manually add a dead ref to ensure it's present during iteration
-    # (GC in _dispatch_local may clean it, but the continue on line 134 should handle it)
+    # Manually add a dead ref to the dispatch snapshot to ensure it's present
+    # during iteration (finalizers clean the set, but a ref can die after the
+    # snapshot was built — the None check in _dispatch_local must skip it)
 
     another = TempSubscriber()
     dead_ref: weakref.ReferenceType[EventSubscriber] = weakref.ref(another)
-    publisher._subscribers.add(dead_ref)
+    publisher._snapshot = (*publisher._snapshot, dead_ref)
     del another  # Now dead_ref() returns None
 
     # Publish should succeed, only live_subscriber receives the event
     publisher.publish(Event1(message="test"))
     assert len(live_subscriber.received_messages) == 1
     assert live_subscriber.received_messages[0] == Event1(message="test")
+
+
+def test_removed_subscriber_stops_receiving_events(
+    publisher: EventPublisher,
+) -> None:
+    """Regression for the cached dispatch snapshot: removing a subscriber
+    that is still alive must take effect on the very next publish."""
+    kept = MockSubscriber()
+    removed = MockSubscriber()
+    publisher.add_subscriber(kept)
+    publisher.add_subscriber(removed)
+
+    publisher.publish(Event1(message="first"))
+    assert len(kept.received_messages) == 1
+    assert len(removed.received_messages) == 1
+
+    publisher.remove_subscriber(removed)
+    publisher.publish(Event1(message="second"))
+
+    assert len(kept.received_messages) == 2
+    # Still alive, but must not receive anything after removal
+    assert len(removed.received_messages) == 1
