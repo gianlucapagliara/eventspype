@@ -186,10 +186,13 @@ class MultiPublisher:
         self, publication: EventPublication, event: Any, caller: Any | None = None
     ) -> None:
         """Trigger an event for a specific publication."""
-        self.is_publication_valid(publication, raise_error=True)
-
-        if publication not in self._publishers:
+        # Fast path: a dedicated publisher only exists for publications that
+        # were validated in add_subscriber, so membership implies validity.
+        publisher = self._publishers.get(publication)
+        if publisher is None:
+            # Preserve the error contract: invalid publications still raise,
+            # valid ones without subscribers are a no-op.
+            self.is_publication_valid(publication, raise_error=True)
             return
 
-        # Use the dedicated publisher to trigger the event
-        self._publishers[publication].publish(event, caller or self)
+        publisher.publish(event, caller or self)
