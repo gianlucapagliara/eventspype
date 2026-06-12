@@ -43,7 +43,8 @@ class LocalBroker(MessageBroker):
             if subscriber is None:
                 continue
             try:
-                subscriber(event, event_tag, caller)
+                # Direct .call dispatch skips the __call__ delegation frame
+                subscriber.call(event, event_tag, caller)
             except Exception:
                 self.logger.error(
                     f"Unexpected error while processing event on channel {channel}.",

@@ -10,6 +10,10 @@ FunctionalEventCallback = SimpleEventCallback | CompleteEventCallback
 
 
 class FunctionalEventSubscriber(EventSubscriber):
+    # One instance is created per functional subscription; slots keep them
+    # compact and speed up the _callback lookup on dispatch.
+    __slots__ = ("_callback",)
+
     def __init__(
         self, callback: FunctionalEventCallback, with_event_info: bool = True
     ) -> None:

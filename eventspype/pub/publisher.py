@@ -35,6 +35,20 @@ class EventPublisher:
     used concurrently from different threads.
     """
 
+    # Slots avoid a per-instance __dict__ and speed up attribute access on
+    # the publish hot path. Subclasses without __slots__ get a __dict__ as
+    # usual and are unaffected.
+    __slots__ = (
+        "_publication",
+        "_broker",
+        "_lock",
+        "_subscribers",
+        "_snapshot",
+        "_logger",
+        "_channel",
+        "__weakref__",
+    )
+
     def __init__(
         self,
         publication: EventPublication,
@@ -150,7 +164,10 @@ class EventPublisher:
                 continue
 
             try:
-                subscriber(event, event_tag, source)
+                # Dispatch to .call directly: EventSubscriber.__call__ is a
+                # plain delegation to .call, so this skips one frame per
+                # delivery without changing the subscriber contract.
+                subscriber.call(event, event_tag, source)
             except Exception:
                 self._log_exception(event)
 

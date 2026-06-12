@@ -199,7 +199,8 @@ class RedisBroker(MessageBroker):
                     if subscriber is None:
                         continue
                     try:
-                        subscriber(event, event_tag, self)
+                        # Direct .call dispatch, consistent with LocalBroker
+                        subscriber.call(event, event_tag, self)
                     except Exception:
                         self.logger.error(
                             f"Error dispatching event on channel {channel}.",
