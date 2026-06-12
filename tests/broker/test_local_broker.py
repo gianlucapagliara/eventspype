@@ -1,3 +1,4 @@
+import gc
 import logging
 import weakref
 from dataclasses import dataclass
@@ -247,3 +248,42 @@ def test_local_broker_dead_subscriber_during_publish(broker: LocalBroker) -> Non
 
     assert len(live_subscriber.received_messages) == 1
     assert live_subscriber.received_messages[0] == Event1(message="hello")
+
+
+def test_local_broker_channel_pruned_after_unsubscribe(broker: LocalBroker) -> None:
+    """Regression: removing the last subscriber must drop the channel entry
+    so channels do not accumulate indefinitely."""
+    sub = MockSubscriber()
+    broker.subscribe("test_channel", sub)
+    assert "test_channel" in broker._subscriptions
+
+    broker.unsubscribe("test_channel", sub)
+    assert "test_channel" not in broker._subscriptions
+
+
+def test_local_broker_channel_pruned_after_gc(broker: LocalBroker) -> None:
+    """Regression: when the last subscriber of a channel is garbage
+    collected, the finalizer must also prune the channel entry."""
+    sub = MockSubscriber()
+    broker.subscribe("test_channel", sub)
+    assert "test_channel" in broker._subscriptions
+
+    del sub
+    gc.collect()
+    assert "test_channel" not in broker._subscriptions
+
+
+def test_local_broker_channel_kept_while_subscribers_remain(
+    broker: LocalBroker,
+) -> None:
+    """Unsubscribing one of several subscribers keeps the channel alive."""
+    sub1 = MockSubscriber()
+    sub2 = MockSubscriber()
+    broker.subscribe("test_channel", sub1)
+    broker.subscribe("test_channel", sub2)
+
+    broker.unsubscribe("test_channel", sub1)
+    assert "test_channel" in broker._subscriptions
+
+    broker.publish("test_channel", Event1(message="still here"), 1, None)
+    assert len(sub2.received_messages) == 1

@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from collections.abc import Callable
 from functools import lru_cache, wraps
 from typing import Any, TypeVar
@@ -12,9 +11,10 @@ T = TypeVar("T")
 
 class MultiSubscriber:
     def __init__(self) -> None:
-        self._subscribers: dict[EventPublisher, dict[EventSubscription, Any]] = (
-            defaultdict(dict)
-        )
+        # Plain dict (not defaultdict): publishers are strongly referenced as
+        # keys, so entries are only created on actual subscription and removed
+        # when the last subscription for a publisher is gone.
+        self._subscribers: dict[EventPublisher, dict[EventSubscription, Any]] = {}
 
     # === Class Methods ===
 
@@ -53,11 +53,13 @@ class MultiSubscriber:
         if subscription not in self._valid_subscriptions():
             raise ValueError("Subscription not defined in event definitions")
 
-        if subscription in self._subscribers[publisher]:
+        existing = self._subscribers.get(publisher)
+        if existing is not None and subscription in existing:
             return
 
         # Save the subscriber to prevent it from being garbage collected
-        self._subscribers[publisher][subscription] = subscription(publisher, self)
+        subscriber = subscription(publisher, self)
+        self._subscribers.setdefault(publisher, {})[subscription] = subscriber
 
     def remove_subscription(
         self, subscription: EventSubscription, publisher: EventPublisher
@@ -65,15 +67,19 @@ class MultiSubscriber:
         if subscription not in self._valid_subscriptions():
             raise ValueError("Subscription not defined in event definitions")
 
-        if subscription not in self._subscribers[publisher]:
+        subscriptions = self._subscribers.get(publisher)
+        if subscriptions is None or subscription not in subscriptions:
             return
 
-        subscribers = list(self._subscribers[publisher][subscription])
+        subscribers = list(subscriptions[subscription])
         for subscriber in subscribers:
             subscription.unsubscribe(publisher, subscriber)
-            self._subscribers[publisher][subscription].remove(subscriber)
+            subscriptions[subscription].remove(subscriber)
 
-        del self._subscribers[publisher][subscription]
+        del subscriptions[subscription]
+        # Drop the publisher key so it does not stay strongly referenced
+        if not subscriptions:
+            del self._subscribers[publisher]
 
     # === Decorators ===
 

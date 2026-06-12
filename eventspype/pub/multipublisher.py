@@ -21,8 +21,12 @@ class MultiPublisher:
     def __init__(self, broker: MessageBroker | None = None) -> None:
         # Map of publications to their dedicated publishers
         self._publishers: dict[EventPublication, EventPublisher] = {}
-        # Keep references to functional subscribers to prevent garbage collection
-        self._functional_subscribers: dict[Any, FunctionalEventSubscriber] = {}
+        # Keep references to functional subscribers to prevent garbage collection.
+        # Keyed by (publication, callback) so the same callback can be
+        # registered for multiple publications independently.
+        self._functional_subscribers: dict[
+            tuple[EventPublication, Any], FunctionalEventSubscriber
+        ] = {}
         self._broker = broker
 
     # === Class Methods ===
@@ -145,15 +149,22 @@ class MultiPublisher:
     def add_subscriber_with_callback(
         self, publication: EventPublication, callback: Any, with_event_info: bool = True
     ) -> None:
-        """Add a callback function as a subscriber for a specific publication."""
+        """Add a callback function as a subscriber for a specific publication.
+
+        Adding the same callback for the same publication twice is a no-op.
+        """
         self.is_publication_valid(publication, raise_error=True)
+
+        key = (publication, callback)
+        if key in self._functional_subscribers:
+            return
 
         subscriber = FunctionalEventSubscriber(
             callback, with_event_info=with_event_info
         )
 
         # Keep a reference to the subscriber
-        self._functional_subscribers[callback] = subscriber
+        self._functional_subscribers[key] = subscriber
         self.add_subscriber(publication, subscriber)
 
     def remove_subscriber_with_callback(
@@ -162,14 +173,12 @@ class MultiPublisher:
         """Remove a callback function subscriber for a specific publication."""
         self.is_publication_valid(publication, raise_error=True)
 
-        if publication not in self._publishers:
+        subscriber = self._functional_subscribers.pop((publication, callback), None)
+        if subscriber is None:
             return
 
-        # Get the subscriber from our references
-        if callback in self._functional_subscribers:
-            subscriber = self._functional_subscribers[callback]
+        if publication in self._publishers:
             self.remove_subscriber(publication, subscriber)
-            del self._functional_subscribers[callback]
 
     # === Events ===
 

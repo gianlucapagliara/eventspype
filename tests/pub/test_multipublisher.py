@@ -1,3 +1,4 @@
+import gc
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -296,3 +297,65 @@ def test_remove_subscriber_with_callback_no_publisher_yet() -> None:
 
     # Should return early without error when publication has no publisher
     pub.remove_subscriber_with_callback(MockPublisher.event1, callback)
+
+
+def test_same_callback_for_multiple_publications(publisher: MockPublisher) -> None:
+    """Regression: registering one callback for two publications must keep
+    both subscriptions alive (entries used to be keyed by callback only,
+    so the second registration silently dropped the first)."""
+    received: list[Any] = []
+
+    def callback(arg: Any, tag: Any, caller: Any) -> None:
+        received.append(arg)
+
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callback)
+    publisher.add_subscriber_with_callback(MockPublisher.event2, callback)
+    gc.collect()  # would collect an overwritten functional subscriber
+
+    publisher.publish(MockPublisher.event1, Event1(message="one"))
+    publisher.publish(MockPublisher.event2, Event2(message="two"))
+
+    assert len(received) == 2
+    assert len(publisher._functional_subscribers) == 2
+
+
+def test_remove_callback_for_one_publication_keeps_others(
+    publisher: MockPublisher,
+) -> None:
+    """Regression: removing a callback from one publication must not
+    unsubscribe it from other publications."""
+    received: list[Any] = []
+
+    def callback(arg: Any, tag: Any, caller: Any) -> None:
+        received.append(arg)
+
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callback)
+    publisher.add_subscriber_with_callback(MockPublisher.event2, callback)
+
+    publisher.remove_subscriber_with_callback(MockPublisher.event1, callback)
+    gc.collect()
+
+    publisher.publish(MockPublisher.event1, Event1(message="one"))
+    publisher.publish(MockPublisher.event2, Event2(message="two"))
+
+    assert len(received) == 1
+    assert received[0] == Event2(message="two")
+    assert len(publisher._functional_subscribers) == 1
+
+
+def test_add_same_callback_twice_is_noop(publisher: MockPublisher) -> None:
+    """Adding the same callback for the same publication twice keeps a
+    single subscription."""
+    received: list[Any] = []
+
+    def callback(arg: Any, tag: Any, caller: Any) -> None:
+        received.append(arg)
+
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callback)
+    publisher.add_subscriber_with_callback(MockPublisher.event1, callback)
+    gc.collect()
+
+    publisher.publish(MockPublisher.event1, Event1(message="once"))
+
+    assert len(received) == 1
+    assert len(publisher._functional_subscribers) == 1

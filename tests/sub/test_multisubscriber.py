@@ -1,4 +1,6 @@
+import gc
 import logging
+import weakref
 from enum import Enum
 from functools import partial
 from typing import Any
@@ -123,7 +125,8 @@ def test_multi_subscriber_remove_subscription(
     subscriber.add_subscription(subscriber.event1, publisher)
     subscriber.remove_subscription(subscriber.event1, publisher)
 
-    assert len(subscriber.subscribers[publisher]) == 0
+    # The publisher entry is pruned entirely so it can be garbage collected
+    assert publisher not in subscriber.subscribers
 
     # Test the subscription is removed
     publisher.publish("test")
@@ -139,8 +142,8 @@ def test_multi_subscriber_remove_nonexistent_subscription(
     # Try to remove subscription that wasn't added
     subscriber.remove_subscription(subscriber.event1, publisher)
 
-    # Should not raise any error
-    assert len(subscriber.subscribers[publisher]) == 0
+    # Should not raise any error, and must not create a ghost entry
+    assert publisher not in subscriber.subscribers
 
 
 def test_multi_subscriber_remove_invalid_subscription(
@@ -232,3 +235,36 @@ def test_multi_subscriber_log_event_decorator_custom_level(caplog: Any) -> None:
         result = subscriber.handle_event("warning_event")
         assert result == "warning_event"
         assert "[CustomPrefix] warning_event" in caplog.text
+
+
+def test_multi_subscriber_does_not_retain_publisher_after_remove(
+    mock_publication: EventPublication,
+) -> None:
+    """Regression: removing the last subscription for a publisher must drop
+    the publisher key so the publisher can be garbage collected."""
+    subscriber = MockMultiSubscriber()
+    publisher = MockPublisher(mock_publication)
+    publisher_ref = weakref.ref(publisher)
+
+    subscriber.add_subscription(subscriber.event1, publisher)
+    subscriber.remove_subscription(subscriber.event1, publisher)
+
+    del publisher
+    gc.collect()
+    assert publisher_ref() is None
+
+
+def test_multi_subscriber_remove_nonexistent_does_not_retain_publisher(
+    mock_publication: EventPublication,
+) -> None:
+    """Regression: removing a never-added subscription must not create a
+    ghost entry that strongly references the publisher forever."""
+    subscriber = MockMultiSubscriber()
+    publisher = MockPublisher(mock_publication)
+    publisher_ref = weakref.ref(publisher)
+
+    subscriber.remove_subscription(subscriber.event1, publisher)
+
+    del publisher
+    gc.collect()
+    assert publisher_ref() is None
