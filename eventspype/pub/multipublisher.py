@@ -1,3 +1,4 @@
+import threading
 from enum import Enum
 from functools import lru_cache
 from typing import Any
@@ -19,6 +20,14 @@ class MultiPublisher:
     """
 
     def __init__(self, broker: MessageBroker | None = None) -> None:
+        # Reentrant lock guarding _publishers / _functional_subscribers and the
+        # broker swap. Reentrant because the *_with_callback helpers call
+        # add_subscriber / remove_subscriber, which also take the lock. The
+        # per-publication EventPublisher has its own internal lock; this one
+        # only serializes the MultiPublisher-level check-then-act bookkeeping
+        # (get-or-create, empty-publisher pruning) so concurrent subscribes to a
+        # new publication cannot drop a subscriber.
+        self._lock = threading.RLock()
         # Map of publications to their dedicated publishers
         self._publishers: dict[EventPublication, EventPublisher] = {}
         # Keep references to functional subscribers to prevent garbage collection.
@@ -109,17 +118,23 @@ class MultiPublisher:
     @broker.setter
     def broker(self, broker: MessageBroker | None) -> None:
         """Set or change the broker for all publishers."""
-        self._broker = broker
-        for publisher in self._publishers.values():
+        with self._lock:
+            self._broker = broker
+            publishers = list(self._publishers.values())
+        for publisher in publishers:
             publisher.broker = broker
 
     def _get_or_create_publisher(self, publication: EventPublication) -> EventPublisher:
-        """Get or create a dedicated publisher for a publication."""
-        if publication not in self._publishers:
-            self._publishers[publication] = EventPublisher(
+        """Get or create a dedicated publisher for a publication.
+
+        The caller must hold ``self._lock`` (the get-or-create is a
+        check-then-act)."""
+        publisher = self._publishers.get(publication)
+        if publisher is None:
+            publisher = self._publishers[publication] = EventPublisher(
                 publication, broker=self._broker
             )
-        return self._publishers[publication]
+        return publisher
 
     def add_subscriber(
         self, publication: EventPublication, subscriber: EventSubscriber
@@ -127,8 +142,9 @@ class MultiPublisher:
         """Add a subscriber for a specific publication."""
         self.is_publication_valid(publication, raise_error=True)
 
-        publisher = self._get_or_create_publisher(publication)
-        publisher.add_subscriber(subscriber)
+        with self._lock:
+            publisher = self._get_or_create_publisher(publication)
+            publisher.add_subscriber(subscriber)
 
     def remove_subscriber(
         self, publication: EventPublication, subscriber: EventSubscriber
@@ -136,15 +152,16 @@ class MultiPublisher:
         """Remove a subscriber for a specific publication."""
         self.is_publication_valid(publication, raise_error=True)
 
-        if publication not in self._publishers:
-            return
+        with self._lock:
+            publisher = self._publishers.get(publication)
+            if publisher is None:
+                return
 
-        publisher = self._publishers[publication]
-        publisher.remove_subscriber(subscriber)
+            publisher.remove_subscriber(subscriber)
 
-        # Clean up empty publishers
-        if not publisher.get_subscribers():
-            del self._publishers[publication]
+            # Clean up empty publishers
+            if not publisher.get_subscribers():
+                del self._publishers[publication]
 
     def add_subscriber_with_callback(
         self, publication: EventPublication, callback: Any, with_event_info: bool = True
@@ -156,16 +173,17 @@ class MultiPublisher:
         self.is_publication_valid(publication, raise_error=True)
 
         key = (publication, callback)
-        if key in self._functional_subscribers:
-            return
+        with self._lock:
+            if key in self._functional_subscribers:
+                return
 
-        subscriber = FunctionalEventSubscriber(
-            callback, with_event_info=with_event_info
-        )
+            subscriber = FunctionalEventSubscriber(
+                callback, with_event_info=with_event_info
+            )
 
-        # Keep a reference to the subscriber
-        self._functional_subscribers[key] = subscriber
-        self.add_subscriber(publication, subscriber)
+            # Keep a reference to the subscriber
+            self._functional_subscribers[key] = subscriber
+            self.add_subscriber(publication, subscriber)
 
     def remove_subscriber_with_callback(
         self, publication: EventPublication, callback: Any
@@ -173,12 +191,13 @@ class MultiPublisher:
         """Remove a callback function subscriber for a specific publication."""
         self.is_publication_valid(publication, raise_error=True)
 
-        subscriber = self._functional_subscribers.pop((publication, callback), None)
-        if subscriber is None:
-            return
+        with self._lock:
+            subscriber = self._functional_subscribers.pop((publication, callback), None)
+            if subscriber is None:
+                return
 
-        if publication in self._publishers:
-            self.remove_subscriber(publication, subscriber)
+            if publication in self._publishers:
+                self.remove_subscriber(publication, subscriber)
 
     # === Events ===
 
@@ -188,7 +207,10 @@ class MultiPublisher:
         """Trigger an event for a specific publication."""
         # Fast path: a dedicated publisher only exists for publications that
         # were validated in add_subscriber, so membership implies validity.
-        publisher = self._publishers.get(publication)
+        # Look the publisher up under the lock, then dispatch outside it so user
+        # subscriber callbacks never run while the MultiPublisher lock is held.
+        with self._lock:
+            publisher = self._publishers.get(publication)
         if publisher is None:
             # Preserve the error contract: invalid publications still raise,
             # valid ones without subscribers are a no-op.

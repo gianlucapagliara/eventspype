@@ -98,18 +98,35 @@ class EventPublisher:
 
     @broker.setter
     def broker(self, broker: MessageBroker | None) -> None:
-        """Set or change the broker. Migrates existing subscribers to the new broker."""
-        old_broker = self._broker
-        self._broker = broker
+        """Set or change the broker. Migrates existing subscribers to the new broker.
 
-        # Migrate subscribers from old broker to new broker
-        if old_broker is not None or broker is not None:
-            active_subscribers = self.get_subscribers()
-            for subscriber in active_subscribers:
-                if old_broker is not None:
-                    old_broker.unsubscribe(self._channel, subscriber)
-                if broker is not None:
-                    broker.subscribe(self._channel, subscriber)
+        The broker swap and the migration snapshot are taken together under the
+        lock so they cannot diverge: an ``add_subscriber`` racing this setter
+        either lands fully before the swap (its subscriber is in the snapshot
+        and gets migrated) or fully after (it reads the new broker and registers
+        there directly). The broker I/O itself runs outside the lock to avoid
+        holding it across network calls (and to keep the publisher lock from
+        ever nesting a broker lock). Concurrent ``remove_subscriber`` during the
+        migration loop remains best-effort, but the broker set deduplicates and
+        a subsequent remove reconciles it.
+        """
+        with self._lock:
+            old_broker = self._broker
+            self._broker = broker
+            if old_broker is None and broker is None:
+                return
+            # Snapshot the live subscribers atomically with the swap. Drain first
+            # so dead refs are not migrated.
+            self._drain_pending_removals()
+            active_subscribers = [
+                s for s in (ref() for ref in self._subscribers) if s is not None
+            ]
+
+        for subscriber in active_subscribers:
+            if old_broker is not None:
+                old_broker.unsubscribe(self._channel, subscriber)
+            if broker is not None:
+                broker.subscribe(self._channel, subscriber)
 
     def _drain_pending_removals(self) -> None:
         """Remove dead refs queued by weakref finalizers.

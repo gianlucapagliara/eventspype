@@ -61,6 +61,14 @@ class RedisBroker(MessageBroker):
         self._allow_unregistered_classes = allow_unregistered_classes
         self._pubsub: Any = None
         self._lock = threading.Lock()
+        # Separate lock guarding the Redis pubsub / listener-thread lifecycle
+        # (_pubsub, _listener_thread). Kept distinct from self._lock so that
+        # blocking Redis I/O (pubsub.subscribe/unsubscribe, run_in_thread) is
+        # never performed while holding the subscriber-set lock -- that would
+        # stall the listener thread, which takes self._lock on every message.
+        # The two locks are always acquired sequentially, never nested, so
+        # there is no lock-ordering deadlock.
+        self._pubsub_lock = threading.Lock()
         self._subscribers: dict[str, set[weakref.ReferenceType[EventSubscriber]]] = {}
         # Dead refs queued by weakref finalizers, applied under the lock.
         self._pending_removals: collections.deque[
@@ -146,11 +154,17 @@ class RedisBroker(MessageBroker):
                 self._subscribers[channel] = set()
             self._subscribers[channel].add(subscriber_ref)
 
-        if is_new_channel:
+        # Pubsub/listener lifecycle is guarded by its own lock (released the
+        # subscriber lock above first -- the two are never held simultaneously).
+        # _ensure_pubsub runs unconditionally so the pubsub object always exists
+        # before _ensure_listener dereferences it: a concurrent close() may have
+        # reset _pubsub to None even when this is not a new channel.
+        with self._pubsub_lock:
             self._ensure_pubsub()
-            prefixed = self._prefixed_channel(channel)
-            self._pubsub.subscribe(**{prefixed: self._make_handler(channel)})
-        self._ensure_listener()
+            if is_new_channel:
+                prefixed = self._prefixed_channel(channel)
+                self._pubsub.subscribe(**{prefixed: self._make_handler(channel)})
+            self._ensure_listener()
 
     def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
         with self._lock:
@@ -163,22 +177,29 @@ class RedisBroker(MessageBroker):
             if channel_empty:
                 del self._subscribers[channel]
 
-        if channel_empty and self._pubsub is not None:
-            self._pubsub.unsubscribe(self._prefixed_channel(channel))
+        if channel_empty:
+            with self._pubsub_lock:
+                if self._pubsub is not None:
+                    self._pubsub.unsubscribe(self._prefixed_channel(channel))
 
     def close(self) -> None:
         """Clean up Redis pubsub resources."""
-        if self._pubsub is not None:
-            self._pubsub.unsubscribe()
-            self._pubsub.close()
-            self._pubsub = None
-        self._listener_thread = None
+        with self._pubsub_lock:
+            if self._pubsub is not None:
+                self._pubsub.unsubscribe()
+                self._pubsub.close()
+                self._pubsub = None
+            self._listener_thread = None
 
     def _ensure_pubsub(self) -> None:
+        # Caller must hold self._pubsub_lock.
         if self._pubsub is None:
             self._pubsub = self._redis.pubsub()
 
     def _ensure_listener(self) -> None:
+        # Caller must hold self._pubsub_lock so the is-alive check and the
+        # thread (re)start are atomic -- otherwise two subscribers could spawn
+        # duplicate listener threads or race a dying one.
         restarting = (
             self._listener_thread is not None and not self._listener_thread.is_alive()
         )
