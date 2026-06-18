@@ -34,6 +34,11 @@ class TrackingEventSubscriber(EventSubscriber):
         self._collected_events: dict[type[Any], deque[Any]] = {}
         self._waiting_by_type: dict[type[Any], MutableSet[asyncio.Event]] = {}
         self._wait_returns: dict[asyncio.Event, Any] = {}
+        # Event loop each waiter's notifier belongs to, captured in wait_for.
+        # call() runs on the publisher/listener thread and must wake the waiter
+        # via loop.call_soon_threadsafe rather than touching asyncio.Event
+        # directly (asyncio primitives are not thread-safe across loops/threads).
+        self._notifier_loops: dict[asyncio.Event, asyncio.AbstractEventLoop] = {}
 
     @property
     def event_log(self) -> list[Any]:
@@ -78,11 +83,15 @@ class TrackingEventSubscriber(EventSubscriber):
         Raises:
             TimeoutError: If the event doesn't occur within timeout_seconds
         """
+        # Capture the loop this coroutine runs on so call() (which may run on a
+        # different thread) can wake us via call_soon_threadsafe.
+        loop = asyncio.get_running_loop()
         notifier = asyncio.Event()
         with self._lock:
             if event_type not in self._waiting_by_type:
                 self._waiting_by_type[event_type] = set()
             self._waiting_by_type[event_type].add(notifier)
+            self._notifier_loops[notifier] = loop
 
         try:
             async with timeout(timeout_seconds):
@@ -100,6 +109,7 @@ class TrackingEventSubscriber(EventSubscriber):
                     if not waiters:
                         del self._waiting_by_type[event_type]
                 self._wait_returns.pop(notifier, None)
+                self._notifier_loops.pop(notifier, None)
 
     def call(
         self,
@@ -130,4 +140,18 @@ class TrackingEventSubscriber(EventSubscriber):
             if waiters:
                 for notifier in waiters:
                     self._wait_returns[notifier] = event_object
-                    notifier.set()
+                    # asyncio.Event is not thread-safe. call() runs on the
+                    # publisher/listener thread, which is usually NOT the loop
+                    # thread awaiting wait_for (always so behind RedisBroker's
+                    # listener). A bare notifier.set() here schedules the wake
+                    # without waking the loop, so the awaiting coroutine hangs
+                    # until its timeout. Marshal the wake onto the waiter's loop.
+                    loop = self._notifier_loops.get(notifier)
+                    if loop is not None:
+                        try:
+                            loop.call_soon_threadsafe(notifier.set)
+                        except RuntimeError:
+                            # Waiter's loop is closed; nothing to wake.
+                            pass
+                    else:
+                        notifier.set()
