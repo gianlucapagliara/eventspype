@@ -111,6 +111,15 @@ class RedisBroker(MessageBroker):
     def publish(
         self, channel: str, event: Any, event_tag: int | str, caller: Any
     ) -> None:
+        # Reclaim finalizer-queued dead refs. publish is send-only and does not
+        # otherwise touch the subscriber sets, so without this a process that
+        # subscribes once to a quiet channel and then only publishes would
+        # accumulate dead refs (and leak the channel entry) until a message is
+        # received or an explicit (un)subscribe occurs. Gated on a lock-free
+        # truthiness check so the common (nothing pending) publish stays cheap.
+        if self._pending_removals:
+            with self._lock:
+                _drain_pending(self._pending_removals, self._subscribers)
         prefixed = self._prefixed_channel(channel)
         payload = self._serializer.serialize(event)
         message = json.dumps(

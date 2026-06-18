@@ -40,8 +40,10 @@ def _make_removal_finalizer(
     a dispatch snapshot is being taken). It must therefore never acquire the
     lock or mutate the subscriptions dict — doing so would self-deadlock a
     non-reentrant lock or corrupt an in-progress iteration. It only appends to
-    the lock-free ``pending`` deque (``deque.append`` is atomic under the GIL);
-    :func:`_drain_pending` applies the removal under the lock at the next
+    the lock-free ``pending`` deque (``deque.append`` is individually
+    thread-safe in CPython — it takes an internal critical section, true on both
+    the GIL and the free-threaded build); :func:`_drain_pending` is the sole
+    consumer and applies the removal under the lock at the next
     subscribe/unsubscribe/dispatch."""
 
     def _finalizer(ref: _SubscriberRef) -> None:

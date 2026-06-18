@@ -61,10 +61,13 @@ class EventPublisher:
         self._lock = threading.Lock()
         self._subscribers: set[weakref.ReferenceType[EventSubscriber]] = set()
         # Dead-subscriber refs queued by weakref finalizers, drained under the
-        # lock at the next add/remove. The finalizer must not touch the lock or
-        # the set directly (see the class docstring), so it only appends here.
-        # ``deque.append``/``popleft`` are atomic under the GIL, so enqueueing
-        # from a finalizer needs no lock of its own.
+        # lock at the next add/remove/publish/get_subscribers. The finalizer must
+        # not touch the lock or the set directly (see the class docstring), so it
+        # only appends here. ``deque.append``/``popleft`` are individually
+        # thread-safe in CPython (the deque takes an internal critical section --
+        # true on both the GIL and the free-threaded build), and drain is the
+        # sole consumer and runs under the lock, so enqueueing from a finalizer
+        # needs no lock of its own.
         self._pending_removals: collections.deque[
             weakref.ReferenceType[EventSubscriber]
         ] = collections.deque()
@@ -125,6 +128,19 @@ class EventPublisher:
             except IndexError:  # pragma: no cover - concurrently emptied
                 break
 
+    def _reconcile_locked(self) -> None:
+        """Drain finalizer-queued dead refs and rebuild the dispatch snapshot.
+
+        The caller must hold ``self._lock``. Used by the read paths
+        (``get_subscribers`` / ``_dispatch_local``) so that a publish-only
+        workload still reclaims dead subscribers: without this, a publisher that
+        is subscribed once and then only published to would never drain
+        ``_pending_removals`` (it grows unbounded) and would keep walking dead
+        refs in the stale snapshot on every dispatch.
+        """
+        self._drain_pending_removals()
+        self._snapshot = tuple(self._subscribers)
+
     def add_subscriber(self, subscriber: EventSubscriber) -> None:
         """Add a subscriber for this publisher's event."""
         # The finalizer only enqueues the dead ref (lock-free). It must never
@@ -157,6 +173,9 @@ class EventPublisher:
     def get_subscribers(self) -> list[EventSubscriber]:
         """Get all active subscribers."""
         with self._lock:
+            # Reclaim finalizer-queued dead refs: get_subscribers is a read path
+            # that may be the only call a publish-only publisher ever sees again.
+            self._reconcile_locked()
             refs = list(self._subscribers)
         return [s for s in (ref() for ref in refs) if s is not None]
 
@@ -179,6 +198,17 @@ class EventPublisher:
 
     def _dispatch_local(self, event: Any, caller: Any | None = None) -> None:
         """Dispatch event directly to local subscribers."""
+        # Reclaim dead subscribers queued by finalizers since the last mutation.
+        # The truthiness check on the deque is lock-free, so a steady-state
+        # publisher (nothing pending) stays on the fully lock-free fast path; we
+        # only pay a lock acquisition when there is actually something to drain.
+        # Without this, a publish-only publisher would never reclaim dead refs:
+        # the deque would grow unbounded and dispatch would keep walking dead
+        # refs in a stale snapshot forever (O(total-ever-subscribed) per
+        # publish). add/remove still drain too, so this is belt-and-suspenders.
+        if self._pending_removals:
+            with self._lock:
+                self._reconcile_locked()
         # Lock-free read of the precomputed snapshot; see __init__ for the
         # invariants. Loop invariants are hoisted out of the dispatch loop.
         snapshot = self._snapshot
