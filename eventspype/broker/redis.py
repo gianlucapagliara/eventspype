@@ -1,3 +1,4 @@
+import collections
 import json
 import logging
 import threading
@@ -5,7 +6,11 @@ import weakref
 from types import TracebackType
 from typing import Any
 
-from eventspype.broker.broker import MessageBroker, _locked_discard_and_prune
+from eventspype.broker.broker import (
+    MessageBroker,
+    _drain_pending,
+    _make_removal_finalizer,
+)
 from eventspype.broker.serializer import EventSerializer, JsonEventSerializer
 from eventspype.sub.subscriber import EventSubscriber
 
@@ -57,6 +62,10 @@ class RedisBroker(MessageBroker):
         self._pubsub: Any = None
         self._lock = threading.Lock()
         self._subscribers: dict[str, set[weakref.ReferenceType[EventSubscriber]]] = {}
+        # Dead refs queued by weakref finalizers, applied under the lock.
+        self._pending_removals: collections.deque[
+            tuple[str, weakref.ReferenceType[EventSubscriber]]
+        ] = collections.deque()
         self._allowed_classes: dict[str, type] = {}
         self._listener_thread: threading.Thread | None = None
         self._logger: logging.Logger | None = None
@@ -115,21 +124,18 @@ class RedisBroker(MessageBroker):
         self._redis.publish(prefixed, message)
 
     def subscribe(self, channel: str, subscriber: EventSubscriber) -> None:
+        # Build the weakref (and its finalizer) outside the lock; the finalizer
+        # only enqueues the dead ref, never locks. Equal refs hash the same, so
+        # the set deduplicates.
+        subscriber_ref = weakref.ref(
+            subscriber, _make_removal_finalizer(self._pending_removals, channel)
+        )
         with self._lock:
+            _drain_pending(self._pending_removals, self._subscribers)
             is_new_channel = channel not in self._subscribers
             if is_new_channel:
                 self._subscribers[channel] = set()
-            # Weakref with a finalizer callback: dead subscribers are removed
-            # automatically and the channel entry is pruned when it empties.
-            # Equal refs hash the same, so the set also deduplicates.
-            subscribers = self._subscribers[channel]
-            subscriber_ref = weakref.ref(
-                subscriber,
-                lambda ref, _l=self._lock, _s=self._subscribers, _c=channel: (
-                    _locked_discard_and_prune(_l, _s, _c, ref)
-                ),
-            )
-            subscribers.add(subscriber_ref)
+            self._subscribers[channel].add(subscriber_ref)
 
         if is_new_channel:
             self._ensure_pubsub()
@@ -139,6 +145,7 @@ class RedisBroker(MessageBroker):
 
     def unsubscribe(self, channel: str, subscriber: EventSubscriber) -> None:
         with self._lock:
+            _drain_pending(self._pending_removals, self._subscribers)
             subscribers = self._subscribers.get(channel)
             if subscribers is None:
                 return
@@ -191,6 +198,7 @@ class RedisBroker(MessageBroker):
 
                 # Snapshot under lock, iterate outside (listener thread)
                 with self._lock:
+                    _drain_pending(self._pending_removals, self._subscribers)
                     refs = self._subscribers.get(channel)
                     snapshot = tuple(refs) if refs else ()
 

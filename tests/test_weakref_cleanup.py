@@ -6,6 +6,7 @@ dead references) works correctly, replacing the old probabilistic GC approach.
 """
 
 import gc
+import threading
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -37,9 +38,11 @@ def make_publisher() -> EventPublisher:
 
 
 class TestWeakrefFinalizerCleanup:
-    def test_dead_subscriber_auto_removed_from_set(self) -> None:
-        """When a subscriber is garbage collected, its weakref callback
-        should automatically remove it from the publisher's subscriber set."""
+    def test_dead_subscriber_removed_lazily_from_set(self) -> None:
+        """When a subscriber is garbage collected, its weakref callback queues
+        the dead ref for removal (a finalizer must not mutate the set or take
+        the lock -- see EventPublisher). It disappears from the public API at
+        once, and is drained from the internal set on the next add/remove."""
         publisher = make_publisher()
         sub = CountingSubscriber()
         publisher.add_subscriber(sub)
@@ -49,8 +52,15 @@ class TestWeakrefFinalizerCleanup:
         del sub
         gc.collect()
 
-        # The finalizer callback should have removed the dead ref
-        assert len(publisher._subscribers) == 0
+        # Publicly gone immediately: a dead ref dereferences to None and is
+        # filtered out / skipped on dispatch.
+        assert publisher.get_subscribers() == []
+
+        # Internal removal is deferred to the next mutation, then complete.
+        keep = CountingSubscriber()
+        publisher.add_subscriber(keep)
+        assert len(publisher._subscribers) == 1
+        assert publisher.get_subscribers() == [keep]
 
     def test_dead_subscriber_not_called_on_publish(self) -> None:
         """Publishing after a subscriber dies should not raise errors."""
@@ -194,3 +204,32 @@ class TestWeakrefFinalizerCleanup:
         publisher.publish(SampleEvent(value=1))
         assert persistent.count == 1
         assert len(publisher.get_subscribers()) == 1
+
+    def test_finalizer_under_held_lock_does_not_deadlock(self) -> None:
+        """Regression: a subscriber dying while the publisher lock is held must
+        not deadlock. The weakref finalizer runs synchronously during GC on the
+        thread holding the lock; if it tried to re-acquire the (non-reentrant)
+        lock it would self-deadlock -- the exact production freeze where
+        add_subscriber's locked snapshot rebuild triggered a finalizer."""
+        publisher = make_publisher()
+        holder = [CountingSubscriber()]
+        publisher.add_subscriber(holder[0])
+
+        finished = threading.Event()
+
+        def kill_under_lock() -> None:
+            with publisher._lock:
+                holder.clear()  # drop the only strong ref -> finalizer fires here
+                gc.collect()
+            finished.set()
+
+        worker = threading.Thread(target=kill_under_lock, daemon=True)
+        worker.start()
+        assert finished.wait(timeout=5.0), (
+            "weakref finalizer re-acquired the publisher lock and self-deadlocked"
+        )
+
+        # The queued dead ref is cleaned up on the next mutation.
+        keep = CountingSubscriber()
+        publisher.add_subscriber(keep)
+        assert publisher.get_subscribers() == [keep]

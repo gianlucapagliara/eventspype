@@ -1,5 +1,6 @@
 import gc
 import logging
+import threading
 import weakref
 from dataclasses import dataclass
 from enum import Enum
@@ -262,15 +263,47 @@ def test_local_broker_channel_pruned_after_unsubscribe(broker: LocalBroker) -> N
 
 
 def test_local_broker_channel_pruned_after_gc(broker: LocalBroker) -> None:
-    """Regression: when the last subscriber of a channel is garbage
-    collected, the finalizer must also prune the channel entry."""
+    """Regression: when the last subscriber of a channel is garbage collected,
+    its queued removal prunes the channel entry on the next broker operation.
+    Cleanup is deferred because a weakref finalizer must not take the lock."""
     sub = MockSubscriber()
     broker.subscribe("test_channel", sub)
     assert "test_channel" in broker._subscriptions
 
     del sub
     gc.collect()
+
+    # Cleanup is deferred to the next locked operation; publishing drains it.
+    broker.publish("test_channel", Event1(message="drain"), 1, None)
     assert "test_channel" not in broker._subscriptions
+
+
+def test_local_broker_finalizer_under_held_lock_does_not_deadlock(
+    broker: LocalBroker,
+) -> None:
+    """Regression: a subscriber dying while the broker lock is held must not
+    deadlock. The weakref finalizer runs synchronously during GC on the thread
+    holding the lock; it must never re-acquire the (non-reentrant) lock."""
+    holder = [MockSubscriber()]
+    broker.subscribe("chan", holder[0])
+
+    finished = threading.Event()
+
+    def kill_under_lock() -> None:
+        with broker._lock:
+            holder.clear()  # drop the only strong ref -> finalizer fires here
+            gc.collect()
+        finished.set()
+
+    worker = threading.Thread(target=kill_under_lock, daemon=True)
+    worker.start()
+    assert finished.wait(timeout=5.0), (
+        "weakref finalizer re-acquired the broker lock and self-deadlocked"
+    )
+
+    # The queued dead ref is applied on the next operation.
+    broker.unsubscribe("chan", MockSubscriber())
+    assert "chan" not in broker._subscriptions
 
 
 def test_local_broker_channel_kept_while_subscribers_remain(

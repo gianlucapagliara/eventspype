@@ -676,6 +676,8 @@ def test_subscriber_garbage_collected_is_removed(broker: RedisBroker) -> None:
     del sub
     gc.collect()
 
+    # Deferred cleanup: the queued removal is applied on the next operation.
+    broker.unsubscribe("chan1", MockSubscriber())
     assert "chan1" not in broker._subscribers
 
 

@@ -1,3 +1,4 @@
+import collections
 import logging
 import threading
 import weakref
@@ -8,23 +9,14 @@ from eventspype.pub.publication import EventPublication
 from eventspype.sub.subscriber import EventSubscriber
 
 
-def _locked_discard(
-    lock: threading.Lock,
-    subscribers: set[weakref.ReferenceType[EventSubscriber]],
-    ref: weakref.ReferenceType[EventSubscriber],
-) -> None:
-    """Weakref finalizer callback that removes a dead ref under the lock."""
-    with lock:
-        subscribers.discard(ref)
-
-
 class EventPublisher:
     """
     EventPublisher with weak references for a single event type. This avoids the lapsed
     subscriber problem by using weakref finalizer callbacks for automatic cleanup.
 
-    When a subscriber is garbage collected, its weakref callback automatically removes the
-    reference from the subscriber set, making cleanup O(1) amortized instead of O(n) per
+    When a subscriber is garbage collected its weakref callback queues the dead
+    reference; queued refs are drained from the subscriber set under the lock on
+    the next add/remove, keeping cleanup O(1) amortized instead of O(n) per
     publish call.
 
     Optionally accepts a MessageBroker for external event dispatch (e.g. Redis, RabbitMQ).
@@ -33,6 +25,15 @@ class EventPublisher:
     Thread safety: a ``threading.Lock`` protects the subscriber set so that
     ``add_subscriber`` / ``remove_subscriber`` and ``_dispatch_local`` can be
     used concurrently from different threads.
+
+    Weakref finalizers never acquire the lock. A finalizer runs synchronously
+    during garbage collection on whatever thread triggered the collection --
+    including a thread already inside this object's locked region (e.g. an
+    allocation in ``add_subscriber`` triggering GC). Acquiring a non-reentrant
+    ``Lock`` there would self-deadlock, and mutating the set could corrupt an
+    in-progress iteration. The finalizer therefore only appends the dead ref to
+    ``_pending_removals``; the actual removal happens in
+    ``_drain_pending_removals`` under the lock.
     """
 
     # Slots avoid a per-instance __dict__ and speed up attribute access on
@@ -43,6 +44,7 @@ class EventPublisher:
         "_broker",
         "_lock",
         "_subscribers",
+        "_pending_removals",
         "_snapshot",
         "_logger",
         "_channel",
@@ -58,11 +60,19 @@ class EventPublisher:
         self._broker = broker
         self._lock = threading.Lock()
         self._subscribers: set[weakref.ReferenceType[EventSubscriber]] = set()
+        # Dead-subscriber refs queued by weakref finalizers, drained under the
+        # lock at the next add/remove. The finalizer must not touch the lock or
+        # the set directly (see the class docstring), so it only appends here.
+        # ``deque.append``/``popleft`` are atomic under the GIL, so enqueueing
+        # from a finalizer needs no lock of its own.
+        self._pending_removals: collections.deque[
+            weakref.ReferenceType[EventSubscriber]
+        ] = collections.deque()
         # Precomputed snapshot of the subscriber set, rebuilt on add/remove
         # under the lock. publish() reads it without locking (the attribute
         # swap is atomic), avoiding a lock acquisition and an O(n) tuple
-        # build per publish. Finalizers only clean the set: a dead ref left
-        # in the snapshot dereferences to None and is skipped on dispatch.
+        # build per publish. A dead ref left in the snapshot dereferences to
+        # None and is skipped on dispatch.
         self._snapshot: tuple[weakref.ReferenceType[EventSubscriber], ...] = ()
         self._logger: logging.Logger | None = None
 
@@ -98,15 +108,31 @@ class EventPublisher:
                 if broker is not None:
                     broker.subscribe(self._channel, subscriber)
 
+    def _drain_pending_removals(self) -> None:
+        """Remove dead refs queued by weakref finalizers.
+
+        The caller must hold ``self._lock``. Doing the set mutation here --
+        serialized by the lock -- rather than in the finalizer is what makes the
+        weakref cleanup deadlock-free: the finalizer may fire on a thread that
+        already holds the lock or while the set is being iterated, so it only
+        enqueues.
+        """
+        pending = self._pending_removals
+        subscribers = self._subscribers
+        while pending:
+            try:
+                subscribers.discard(pending.popleft())
+            except IndexError:  # pragma: no cover - concurrently emptied
+                break
+
     def add_subscriber(self, subscriber: EventSubscriber) -> None:
         """Add a subscriber for this publisher's event."""
-        # Create weak reference with a finalizer callback for automatic cleanup
-        subscribers = self._subscribers
-        lock = self._lock
-        subscriber_ref = weakref.ref(
-            subscriber, lambda ref: _locked_discard(lock, subscribers, ref)
-        )
+        # The finalizer only enqueues the dead ref (lock-free). It must never
+        # acquire self._lock: it can fire during GC on a thread already inside
+        # the locked region below, and a non-reentrant Lock would self-deadlock.
+        subscriber_ref = weakref.ref(subscriber, self._pending_removals.append)
         with self._lock:
+            self._drain_pending_removals()
             self._subscribers.add(subscriber_ref)
             self._snapshot = tuple(self._subscribers)
 
@@ -120,6 +146,7 @@ class EventPublisher:
         subscriber_ref = weakref.ref(subscriber)
 
         with self._lock:
+            self._drain_pending_removals()
             self._subscribers.discard(subscriber_ref)
             self._snapshot = tuple(self._subscribers)
 
